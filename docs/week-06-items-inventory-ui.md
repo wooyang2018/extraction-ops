@@ -2,136 +2,141 @@
 
 ## 本周目标
 
-做出撤离射击中最能体现“游戏业务理解”的系统：物品定义、拾取、背包、装备、丢弃和 HUD 展示。本周先完成客户端和对局内服务端状态，持久化到 Go 后台放到第 8～10 周。
+基于 Lyra Inventory/Equipment 实现服务器权威的简单槽位背包：稳定物品定义、唯一实例、拾取、移动、堆叠、拆分、装备、使用、丢弃和 UI。对局外永久仓库仍留给第 8–10 周 Backend。
+
+## 前置条件与周门槛
+
+- 第 5 周 GAS 属性和死亡状态在两客户端一致。
+- 所有背包核心代码进入 ExtractionOps；UI 只发 Command 并消费状态。
+- 本周采用固定数量槽位，不做俄罗斯方块背包、重量与槽位双重限制或持久化仓库。
+
+## 本周时间预算（15–20 小时）
+
+| 工作单元 | 内容 | 时间 |
+| --- | --- | ---: |
+| 1 | 数据模型和 Lyra Inventory 阅读 | 3 小时 |
+| 2 | 物品定义、实例与地面拾取 | 4 小时 |
+| 3 | 背包命令、版本与服务器校验 | 4–5 小时 |
+| 4 | 背包/装备 UI | 3–4 小时 |
+| 5 | 双人争抢、非法操作和恢复测试 | 2–4 小时 |
+
+## 先读什么
+
+- `Inventory/LyraInventoryItemDefinition.*`、`LyraInventoryItemInstance.*`、`LyraInventoryManagerComponent.*`；
+- `Inventory/IPickupable.*` 与 Inventory Fragment；
+- `Equipment/LyraEquipmentDefinition.*`、`LyraEquipmentManagerComponent.*`、`LyraQuickBarComponent.*`；
+- Fast Array/复制集合相关实现；
+- CommonUI 的 Activatable Widget 和输入路由。
+
+## 工作单元 1：锁定数据模型和职责
+
+在文档中先固定：
+
+```text
+ItemDefinition：类型数据；不含运行时数量
+ItemInstance：instance_id、definition_id、quantity、durability、附加状态
+InventoryState：玩家本局槽位、版本、容量
+WorldPickup：世界容器中的 ItemInstance
+PersistentStash：Backend 持久化对象，本周不实现
+```
+
+`instance_id` 由 Server 创建，使用 UUID/Guid 字符串；相同 Definition 的两个物品仍有不同 ID。堆叠时保留一个实例并调整数量，拆分时由 Server 生成新实例 ID。
+
+固定 16 个槽位、同类物品最大堆叠取 Definition 配置。三类测试物品：Rifle、RifleAmmo、Medkit。容量只按槽位判定。
+
+## 工作单元 2：物品资产与地面拾取
+
+### 2.1 创建定义
+
+在 `Content/Items` 创建三个 ItemDefinition，使用 Fragment 配置图标、显示名、最大堆叠、装备定义或使用 Ability。不要把显示名/图标复制到 Pickup Blueprint。
+
+### 2.2 创建 WorldPickup
+
+新增 Extraction Pickup Actor/组件，复制 `item_instance_id`、Definition、数量和是否可用；Server 创建实例，客户端只显示。交互请求只携带 `item_instance_id` 和 `request_id`。
+
+Server 按顺序校验：玩家/Pawn 有效 → 非 Dead → 距离在阈值内 → Pickup 仍可用 → Inventory 有容量 → 原子地从世界移入背包。成功后销毁/禁用 Pickup 并复制结果。
+
+错误码固定为：`ItemNotFound`、`InventoryFull`、`OutOfRange`、`AlreadyConsumed`、`InvalidState`。
+
+## 工作单元 3：命令、版本和复制
+
+统一从 Inventory Component 暴露意图接口：
+
+```text
+MoveItem(source_slot, target_slot, expected_version)
+SplitStack(item_instance_id, quantity, target_slot, expected_version)
+EquipItem(item_instance_id, expected_version)
+UseItem(item_instance_id, expected_version)
+DropItem(item_instance_id, quantity, expected_version)
+```
+
+每个请求经过拥有客户端 → Server 权威入口，验证 Ownership、槽位、数量、Definition 能力、当前状态和 `expected_version`。成功完成一次事务性内存变换后 `inventory_version += 1`；失败不修改状态，并返回错误码和当前版本。
+
+实现顺序：Add/Pickup → Move/Swap → Merge → Split → Equip/Unequip → Medkit Use → Drop。每完成一个命令先写最小测试，再进入下一个。
+
+复制策略：Owner 收到完整槽位和数量；其他客户端只收到外观所需的装备/地面 Pickup，不复制别人的完整背包。旧版本响应不得覆盖新版本状态。
+
+## 工作单元 4：背包与装备 UI
+
+创建 `W_ExtractionInventoryScreen`、槽位 Widget、装备槽、物品详情、容量文本、拾取提示和错误提示。
+
+1. 打开界面时从 Inventory State 构建 ViewModel；
+2. 拖拽只产生 Move/Equip Command，不修改数组；
+3. 请求处理中显示 pending，但不假定成功；
+4. Server 接受后用新版本状态更新；
+5. 拒绝时撤销 pending 并显示对应中文信息；
+6. 关闭/重开、角色重生后重新订阅状态。
+
+输入路由必须阻止背包打开时同时开火；关闭后恢复 Gameplay 输入。Dedicated Server 不加载 Widget。
+
+## 工作单元 5：多人、非法请求与恢复
+
+执行固定矩阵：
+
+1. A 正常拾取三类物品、移动、合并、拆分、装备、治疗、丢弃；
+2. A/B 同时拾取同一个实例，仅一个成功，另一方收到 `AlreadyConsumed`；
+3. 满背包、超距离、Dead、错误槽位、数量为 0/超量均被拒绝；
+4. 用旧 `expected_version` 提交命令，返回当前版本且不覆盖新状态；
+5. B 只能看到 A 的装备变化，看不到 A 完整背包；
+6. A 关闭 HUD/背包再打开，状态完整恢复；
+7. 100 ms 延迟和 5% 丢包下重复点击不会复制物品。
+
+保存 Server 的 instance_id 转移日志，证明物品从 World 容器移动到 Inventory，再移动回 World，而不是复制出第二份。
 
 ## 验收目标
 
-- 至少有三类物品：武器、弹药、医疗物品；
-- 物品由稳定的 Item Definition 描述，实例有唯一 Item Instance ID；
-- 玩家能拾取、放入背包、装备、使用和丢弃物品；
-- 背包容量、重量或格子限制至少实现一种；
-- 两客户端看到的地面物品和装备状态最终一致；
-- 非法拾取、重复拾取、超距离拾取会被服务器拒绝；
-- UI 与游戏状态解耦，重建 HUD 后仍能显示正确背包；
-- 能解释物品定义、物品实例、对局状态和持久化仓库的区别。
-
-## 操作步骤
-
-### 1. 设计数据模型
-
-建议区分四个概念：
-
-```text
-ItemDefinition
-  描述物品类型：名称、图标、重量、最大堆叠、装备槽、使用效果
-
-ItemInstance
-  描述某个具体物品：instance_id、definition_id、耐久、数量、附加属性
-
-InventoryState
-  描述玩家当前对局背包：槽位、物品实例、容量、版本号
-
-PersistentStash
-  描述玩家对局外仓库：由后台数据库负责保存
-```
-
-不要把图标、名称和数值直接复制到每个拾取物 Blueprint。使用 Data Asset、Data Registry 或项目已有的数据驱动方式。
-
-### 2. 实现地面拾取
-
-地面物品至少包含：
-
-- `item_instance_id`；
-- `item_definition_id`；
-- 世界位置；
-- 是否已被拾取；
-- 是否属于某个玩家；
-- 是否已经过期。
-
-客户端只发送“我想拾取哪个实例”的请求。服务器检查距离、可见状态、玩家容量和实例是否仍存在，然后把实例从世界状态转移到背包。
-
-### 3. 实现背包操作
-
-先做简单槽位背包，不要一开始做复杂俄罗斯方块背包。支持：
-
-- 添加物品；
-- 移动槽位；
-- 合并堆叠；
-- 拆分堆叠；
-- 装备和卸下；
-- 使用医疗品；
-- 丢弃到世界。
-
-所有操作都通过一个明确的 Command 或函数入口处理，例如：
-
-```text
-MoveItem(source_slot, target_slot)
-EquipItem(item_instance_id)
-UseItem(item_instance_id)
-DropItem(item_instance_id, quantity)
-```
-
-避免在 UI 的拖拽事件里直接修改数组。UI 只创建操作请求，状态组件负责校验和执行。
-
-### 4. 设计状态版本
-
-给 `InventoryState` 加一个递增版本号或操作序号。客户端收到较旧状态时不要覆盖较新状态；服务器拒绝客户端操作时，要返回当前正确状态或明确的错误码。
-
-建议错误码：
-
-- `ItemNotFound`；
-- `InventoryFull`；
-- `InvalidSlot`；
-- `NotOwner`；
-- `OutOfRange`；
-- `AlreadyConsumed`；
-- `InvalidState`。
-
-### 5. 做 UI 状态消费
-
-UI 至少包含：
-
-- 背包面板；
-- 装备槽；
-- 物品详情；
-- 拾取提示；
-- 操作失败提示；
-- 当前重量或容量。
-
-测试 HUD 被关闭、重新打开、地图切换和角色死亡后是否仍能正确渲染。
+- [ ] Rifle、Ammo、Medkit 使用稳定 Definition；
+- [ ] 每个 ItemInstance 有 Server 生成的唯一 ID；
+- [ ] 支持拾取、移动、堆叠、拆分、装备、使用和丢弃；
+- [ ] 16 槽容量限制生效；
+- [ ] 命令统一带 expected_version 并返回确定错误码；
+- [ ] 双人争抢只产生一个胜者；
+- [ ] Owner-only 背包与公开装备边界正确；
+- [ ] UI 重建后状态正确且不直接写数据。
 
 ## 实现原理
 
-背包是一个典型的“状态转移”系统。拾取不是复制一个物品，而是把一个唯一实例从世界容器移动到玩家容器。装备、使用和丢弃也应该是对状态的合法变换，而不是 UI 事件直接改字段。
+背包是唯一实例在容器之间的权威状态转移，不是 UI 数组操作。Definition 描述类型，Instance 描述具体对象，InventoryState 描述本局容器，PersistentStash 属于战局外 Backend。实例 ID、版本号和单一 Server 入口是后续重连与幂等结算的基础。
 
-实例 ID 对后续后台持久化和幂等很重要。只有 `definition_id` 无法区分两个相同类型但耐久不同的物品，也无法阻止同一物品被重复消费。
+## 常见问题与停止条件
 
-## 常见问题
+- 两人都拿到物品：Server 检查与转移不是同一个权威操作。
+- UI 已移动但 Server 拒绝：UI 不得先改真实数组，只显示 pending。
+- Fast Array 不更新：检查项脏标记、复制拥有者和回调。
+- 重建 HUD 为空：状态被错误保存在 Widget，而非 Inventory Component。
 
-### 两个客户端都拾取到了同一件物品
-
-服务器在一个临界区内检查和转移物品，并在成功后立即标记已拾取。客户端的本地隐藏只是表现，不能作为权威锁。
-
-### UI 显示了已经被其他玩家拿走的物品
-
-这是正常的短暂网络延迟，但最终要收到服务器状态并移除。不要为避免闪烁而允许客户端永久保留一个不存在的物品。
-
-### 重连后背包变空
-
-本周可以先恢复对局内服务器状态。对局外仓库和结算持久化留到第 8～10 周；文档中必须明确两种状态的边界。
+出现复制物品、丢失实例 ID或版本回退时，不进入撤离循环。
 
 ## 本周作品集产出
 
-- 物品数据模型图；
-- 一段多人同时争抢同一物品的演示；
-- 背包命令和错误码表；
-- 一篇“为什么 UI 不能直接改背包状态”的文章；
-- 一张客户端、Dedicated Server 和后台之间的物品状态边界图。
+- 物品/容器数据模型图；
+- 双人争抢视频；
+- Command 与错误码表；
+- Owner-only 复制说明；
+- UI 不直接改状态的技术笔记。
 
 ## 参考资料
 
+- [Lyra Inventory and Equipment](https://dev.epicgames.com/documentation/en-us/unreal-engine/lyra-inventory-and-equipment-in-unreal-engine)
 - [Data Assets](https://dev.epicgames.com/documentation/en-us/unreal-engine/data-assets-in-unreal-engine)
-- [Data Registry](https://dev.epicgames.com/documentation/en-us/unreal-engine/data-registries-in-unreal-engine)
-- [Common UI Plugin](https://dev.epicgames.com/documentation/en-us/unreal-engine/common-ui-plugin-for-advanced-user-interfaces)
-- 项目内：[Source/LyraGame/Equipment](../Source/LyraGame)
-
+- [项目 Inventory 源码](../Source/LyraGame/Inventory)

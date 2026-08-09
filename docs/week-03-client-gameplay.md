@@ -2,112 +2,174 @@
 
 ## 本周目标
 
-做出第一条有操作感的客户端战斗回路：进入地图、移动、瞄准、射击、换弹、命中反馈、显示弹药和生命值。本周先把“能玩”做出来，下一周再把网络边界做严谨。
+复用 ShooterCore 已有 Experience、Pawn、GAS 武器、QuickBar 和 HUD，做出 ExtractionOps 的单机战斗回路：进入地图、移动、瞄准、射击、换弹、命中、受伤、死亡。本周只建立客户端体验基线；权威网络校验在第 4 周完成。
+
+## 前置条件与周门槛
+
+- 第 2 周 `ExtractionOps` Feature 能加载和停用，默认 Lyra 无回归。
+- 本周新增内容全部放在 `Plugins/ExtractionOps/Content` 或其运行时模块；复制资产时保留对 ShooterCore 公共资产的引用。
+- 不新建第二套角色移动、ASC、Inventory 或武器框架。
+
+## 本周时间预算（15–20 小时）
+
+| 工作单元 | 内容 | 时间 |
+| --- | --- | ---: |
+| 1 | 跑通并记录 ShooterCore 战斗链 | 3 小时 |
+| 2 | 配置 Extraction PawnData、输入和武器 | 4 小时 |
+| 3 | 完成射击、换弹和死亡状态 | 4–5 小时 |
+| 4 | 制作 Extraction HUD 与反馈 | 3–4 小时 |
+| 5 | 单机测试、非法状态测试和录屏 | 2–4 小时 |
+
+## 先读什么
+
+- `Character/LyraHeroComponent.*` 与 `Input/LyraInputConfig.*`；
+- `Equipment/LyraQuickBarComponent.*`、`LyraEquipmentManagerComponent.*`；
+- `Weapons/LyraGameplayAbility_RangedWeapon.*`、`LyraRangedWeaponInstance.*`；
+- `AbilitySystem/Attributes/LyraHealthSet.*`、`Character/LyraHealthComponent.*`；
+- `UI/Weapons/LyraWeaponUserInterface.*` 与 ShooterCore 的实际 HUD 资产。
+
+先在 Reference Viewer 中查看 ShooterCore Experience → PawnData → AbilitySet/InputConfig → HUD 的引用关系。
+
+## 工作单元 1：建立 ShooterCore 行为基线
+
+1. 用原 ShooterCore Experience 进入单机 PIE；
+2. 录制移动、跳跃、瞄准、射击、自动/单发、换武器、受伤、死亡；
+3. 在 Output Log 中为输入标签、Ability 名称、武器实例和弹药变化建立观察记录；
+4. 找到实际使用的 Experience、PawnData、InputConfig、AbilitySet、武器 ItemDefinition 和 HUD Layout 资产路径；
+5. 用 Reference Viewer 确认哪些资产来自 ShooterCore，哪些位于 LyraGame。
+
+成功信号：能为一次射击写出 `InputTag -> Ability 激活 -> WeaponInstance -> TargetData -> Damage -> Health -> HUD` 链路。找不到链路时不要复制资产开始修改。
+
+## 工作单元 2：配置 Extraction Pawn、输入和武器
+
+### 2.1 创建最小派生资产
+
+在插件中创建：
+
+```text
+Content/Experiences/B_ExtractionExperience
+Content/Pawns/DA_ExtractionPawnData
+Content/Input/DA_ExtractionInputConfig
+Content/UI/W_ExtractionHUDLayout
+Content/Weapons/DA_ExtractionRifle
+```
+
+名称可依项目资产前缀规则调整，但文档和录屏中保持一致。PawnData 复用现有 Character/Pawn 类与动画，不复制模型和动画蓝图。
+
+### 2.2 输入清单
+
+确保 InputConfig/Mapping Context 中存在且只绑定一次：
+
+- Move、Look、Jump；
+- Aim、Fire；
+- Reload；
+- QuickBar Slot 或 Next/Previous Weapon；
+- Interact（第 6–7 周使用，当前只确认不会冲突）。
+
+逐个按键测试按下、持续、释放。一次点击触发多次时，检查 Input Trigger 与 Ability 输入绑定，不用额外布尔变量遮掩。
+
+### 2.3 武器数据
+
+从现有 Rifle ItemDefinition/EquipmentDefinition 派生最小配置，集中记录射速、弹匣容量、散布、射程、伤害 Effect 和准星。运行时状态继续由 Lyra WeaponInstance/Inventory 管理，不在 Data Asset 保存当前弹药。
+
+通过标准：Extraction Experience 使用自己的 PawnData/InputConfig/HUD，但底层 Lyra 战斗能力仍正常。
+
+## 工作单元 3：射击、换弹、受伤和死亡
+
+### 3.1 明确状态与阻断
+
+本周统一使用 Gameplay Tag 表达：
+
+```text
+State.Aiming
+State.Reloading
+State.Dead
+Ability.Fire
+Ability.Reload
+```
+
+标签先记录在 ExtractionOps 标签配置/原生标签入口；第 5 周系统化扩展。禁止在多个 Widget/Blueprint 各保存一份 `IsReloading`。
+
+### 3.2 射击与弹药
+
+复用 Lyra ranged weapon Ability：
+
+1. 输入触发 Ability；
+2. 本地播放枪口、音效和后坐；
+3. WeaponInstance 提供散布和射击参数；
+4. Item Tag Stack/现有成本系统扣除弹药；
+5. TargetData 触发伤害；
+6. HealthSet 变化驱动受伤/死亡。
+
+日志加入本地 `shot_id`，记录 input、ability_activated、shot_fired、hit_feedback 四个事件，确认一次点击只有一个 shot_id。
+
+### 3.3 换弹
+
+在现有 Ability/AbilitySet 上配置换弹能力，至少覆盖：空弹匣、非满弹、满弹、无备用弹、换弹中开火、换弹中死亡。换弹完成前不直接把 UI 数字改成满弹；UI 读取真实库存/武器状态。
+
+### 3.4 受伤与死亡
+
+使用现有 HealthComponent 和 Death Ability。制作一个仅用于测试的伤害来源或 Lyra Bot，验证 Health 归零后：Fire/Reload 被阻断、死亡表现播放、HUD 状态更新。
+
+本周可使用本地或 Listen Server 命中作为体验验证，但在笔记中明确最终命中必须由第 4 周 Server 确认。
+
+## 工作单元 4：Extraction HUD 与表现
+
+HUD 至少显示：武器名、当前/备用弹药、生命值、准星、命中反馈、Reloading/Dead、当前 NetMode。实现步骤：
+
+1. 复用 Lyra HUD Layout 和 Weapon UI 扩展点；
+2. C++/现有组件提供只读状态与变化委托；
+3. Blueprint Widget 绑定变化事件并展示；
+4. 关闭再打开 HUD，确认状态从数据源重建；
+5. 禁止 Widget Tick 全量扫描 Inventory 或写回属性。
+
+表现层依次增加枪口火焰、音效、后坐、准星扩散和命中标记。每加一项都测试关闭该表现不影响伤害与弹药逻辑。
+
+## 工作单元 5：单机测试与证据
+
+执行固定测试：
+
+1. 正常：拾取/获得 Rifle → 射击 → 弹匣为空 → 换弹 → 击杀目标；
+2. 非法：满弹换弹、零备用弹换弹、死亡后射击；
+3. 输入：快速点按 20 次，shot_id 不重复且弹药变化一致；
+4. UI：战斗中关闭并重建 HUD，数字恢复正确；
+5. 回归：切回原 ShooterCore Experience，原玩法不受影响。
+
+每项记录 Given/When/Then、日志事件和截图。录制 1 分钟不剪辑战斗视频。
 
 ## 验收目标
 
-- 能使用 Enhanced Input 完成移动、视角、跳跃、瞄准、射击、换弹；
-- 武器、弹药、准星、生命值和命中反馈可见；
-- 武器配置使用 Data Asset 或数据驱动方式，不把数值散落在 Blueprint 节点中；
-- 核心行为用 C++ 编写，表现层用 Blueprint/动画/特效组合；
-- PIE 单机模式下完成“拾枪 -> 射击 -> 换弹 -> 受伤 -> 死亡”的流程；
-- 能解释本地输入、角色移动、武器逻辑和 HUD 的数据流。
-
-## 操作步骤
-
-### 1. 先复用 Lyra 的输入和角色
-
-先确认 Lyra 现有输入映射、输入标签和角色类。不要同时重写移动系统、动画系统和武器系统。先找到可扩展点，再替换最小行为。
-
-记录：
-
-- Input Action 资产；
-- Input Mapping Context；
-- 角色绑定输入的入口；
-- 武器激活和切换入口；
-- HUD 的创建和数据绑定方式。
-
-### 2. 定义客户端领域对象
-
-建议建立以下最小类型，具体命名可以按现有项目规范调整：
-
-- `UExtractionWeaponData`：射速、弹匣容量、换弹时间、伤害类型等配置；
-- `UExtractionWeaponInstance`：当前武器实例和运行时状态；
-- `UExtractionCombatComponent`：当前装备、射击输入、换弹状态；
-- `UExtractionHUDViewModel`：把游戏状态转换为 UI 可消费的数据；
-- `WBP_ExtractionHUD`：只负责展示，不直接修改服务器状态。
-
-### 3. 实现输入状态机
-
-至少明确以下状态：
-
-```text
-Idle -> Aiming -> Firing
-Idle -> Reloading -> Idle
-Firing -> Reloading
-任何状态 -> Dead
-```
-
-禁止在多个 Blueprint 里分别维护“是否换弹”“是否射击”“是否死亡”。这些状态要集中管理，并通过 Gameplay Tag、枚举或明确的组件状态表达。
-
-### 4. 实现命中反馈
-
-先实现本地表现：
-
-- 准星扩散；
-- 枪口火焰；
-- 后坐力；
-- 命中音效；
-- 受击数字或方向提示；
-- 弹药减少；
-- 换弹动画。
-
-本周可以暂时使用本地射线检测，但要在代码中明确标记：真实版本必须由服务器确认命中和伤害。不要把本地命中结果直接当成可信结果。
-
-### 5. 做基础 HUD
-
-HUD 至少显示：
-
-- 当前武器；
-- 当前弹匣/备用弹药；
-- 当前生命值；
-- 当前网络模式；
-- 调试状态：本地角色和服务器角色。
-
-把 HUD 当作状态的消费者，而不是游戏逻辑的持有者。UI 关闭或重建时，游戏状态不能丢失。
+- [ ] Extraction Experience 支持移动、视角、跳跃、瞄准、射击和换弹；
+- [ ] 武器数据集中在 Data Asset/现有 Lyra Definition；
+- [ ] 一次输入、一条 shot_id、一次弹药成本；
+- [ ] 换弹和死亡正确阻断射击；
+- [ ] HUD 只消费状态，重建后显示正确；
+- [ ] 单机可走通“获得武器 → 战斗 → 换弹 → 受伤 → 死亡”；
+- [ ] 能解释客户端输入、预测表现和最终状态的区别。
 
 ## 实现原理
 
-客户端玩法通常由输入、预测、表现和最终状态四层组成。输入层说明玩家意图；预测层让操作即时响应；表现层播放动画和特效；服务器确认后再修正状态。把这四层混在一起，会导致单机看起来正确、联机后出现双发、重复扣弹或状态回滚。
+Lyra 已把输入标签、Ability、WeaponInstance、Inventory/Equipment 和 UI 扩展点连接起来。本周的价值是掌握并配置这条链，而不是重建一套 CombatComponent。输入表示意图，预测提供即时表现，状态组件保存事实，HUD 只是消费者。
 
-数据驱动的意义是把“武器是什么”与“武器怎么运行”分开。调整武器参数时不需要复制一套 Blueprint；以后接后台配置或活动武器也更容易。
+## 常见问题与停止条件
 
-## 常见问题
+- 一次输入多发：检查 Enhanced Input Trigger、Ability 输入和自动射击计时器。
+- 换弹仍可射击：检查阻断标签和 Ability 激活条件。
+- UI 不更新：先验证数据源，再验证委托绑定，禁止用 Tick 掩盖。
+- 复制资产后引用丢失：用 Reference Viewer 修复依赖，不复制整个 ShooterCore。
 
-### 射击按一下却触发多次
-
-检查 Input Action 的触发事件、自动射击计时器和 Ability/Component 状态是否重复响应。给每次射击增加本地 shot id，日志中打印输入、触发和发射三个事件。
-
-### 换弹过程中仍然能射击
-
-把 `Reloading` 作为明确的阻断状态，而不是在多个地方通过布尔值临时判断。Gameplay Tags 或集中式状态机更容易维护。
-
-### UI 显示不更新
-
-不要在 Tick 中无条件刷新整个 HUD。使用事件、属性变化回调或轻量 ViewModel。先确认数据源变化，再确认 UI 绑定是否有效。
+战斗回路或原玩法回归未通过时，不进入网络改造。
 
 ## 本周作品集产出
 
-- 一段 1 分钟可操作战斗视频；
-- 输入到 HUD 的数据流图；
-- 武器数据驱动示例；
-- “客户端命中不是最终可信结果”的设计说明；
-- 至少一个可复用的 C++ Combat Component。
+- 1 分钟战斗视频；
+- 输入到 HUD 数据流图；
+- 武器数据配置截图；
+- shot_id 调试记录；
+- “客户端命中为何不可信”设计说明。
 
 ## 参考资料
 
 - [Enhanced Input](https://dev.epicgames.com/documentation/en-us/unreal-engine/enhanced-input-in-unreal-engine)
-- [Gameplay Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine)
-- [Lyra Sample Game](https://dev.epicgames.com/documentation/en-us/unreal-engine/lyra-sample-game-in-unreal-engine)
-- [Common UI](https://dev.epicgames.com/documentation/en-us/unreal-engine/common-ui-plugin-for-advanced-user-interfaces)
-
+- [Lyra Abilities](https://dev.epicgames.com/documentation/en-us/unreal-engine/abilities-in-lyra-in-unreal-engine)
+- [Lyra 武器源码](../Source/LyraGame/Weapons)

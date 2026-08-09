@@ -2,146 +2,140 @@
 
 ## 本周目标
 
-处理真实网络环境中最容易暴露工程能力的部分：断线、重试、超时、重复请求、结算失败和恢复。目标是做到“请求可以重复，结果不能重复”。
+让网络和 HTTP 请求可以重复、最终结果不能重复：玩家断线后 90 秒内恢复同一 Pawn/Run；Dedicated Server 生成权威结算；SQLite transaction、状态条件和唯一约束保证重复或并发结算只发奖一次。
 
-## 验收目标
+## 前置条件与周门槛
 
-- 玩家断线后在宽限时间内能够回到同一局；
-- 重连不会创建重复角色；
-- 重连后生命、装备、背包和对局 ID 恢复正确；
-- 对局结束后重连不能修改结算结果；
-- 同一结算请求发送 10 次只发放一次奖励；
-- 并发结算请求最终只有一个有效结果；
-- 数据库写入成功但响应丢失时，重试能够返回已处理结果；
-- 后台不可用时，Dedicated Server 能进入明确的待重试或失败状态。
+- 第 9 周并发分配和 Ticket 身份链通过。
+- 重连身份使用稳定 player_id/match_id/run_id，不使用 NetConnection 或临时 Controller ID。
+- 结算内容只接受 Dedicated Server 生成的数据，Client 不上传权威奖励。
 
-## 操作步骤
+## 本周时间预算（15–20 小时）
 
-### 1. 设计断线状态机
+| 工作单元 | 内容 | 时间 |
+| --- | --- | ---: |
+| 1 | 断线状态机与 Server 快照 | 4 小时 |
+| 2 | 重连 Ticket 与 Pawn 恢复 | 4 小时 |
+| 3 | 结算 schema、事务和幂等 | 4–5 小时 |
+| 4 | 重试队列与失败状态 | 3 小时 |
+| 5 | 并发、响应丢失和竞态实验 | 2–4 小时 |
+
+## 先读什么
+
+- UE GameMode Logout/PreLogin/PostLogin、PlayerState inactive/reconnect 行为；
+- 第 7 周 RunState/InventoryState 和结果快照；
+- 第 8–9 周 Ticket、Match/Run schema；
+- SQLite transaction、unique constraint、UPSERT 与 Go `database/sql` 错误处理。
+
+## 工作单元 1：断线状态机和快照
+
+固定状态：
 
 ```text
-Connected
-  -> Disconnected
-  -> GracePeriod
-      -> Reconnected -> Restoring -> Connected
-      -> Timeout -> Abandoned
+Connected -> Disconnected -> GracePeriod
+GracePeriod -> Reconnected -> Restoring -> Connected
+GracePeriod -> Timeout -> Abandoned
 ```
 
-明确每个状态：
+MVP 规则：宽限期 90 秒；Pawn 留在世界，可被攻击，倒计时继续；槽位不释放给其他身份；物品不可因断线复制/自动保全；若死亡则 Run 进入 Dead，重连只能看结果。
 
-- 角色是否保留；
-- 是否可以被攻击；
-- 其他玩家是否可以拾取其物品；
-- 是否继续消耗撤离倒计时；
-- 是否允许新的连接占用槽位。
+Server 为每个 run 保存恢复快照：run_state、Pawn 位置/旋转、Health/Armor、装备、完整本局 InventoryState/version、Extraction 状态/结束时间、snapshot_version。快照由权威状态更新驱动，不从 Client 上传。
 
-建议 MVP 保留角色 90 秒，重连时依据稳定的 `player_id` 恢复，而不是依据临时连接 ID。
+断线时解绑临时 Controller，但保留 run 与 Pawn 的唯一关联。相同 player_id/run_id 不得生成第二个 Pawn。
 
-### 2. 实现重连票据
+## 工作单元 2：重连 Ticket 与恢复
 
-重连需要一个短期有效的凭证，包含：
+重连 Ticket 绑定 player_id、match_id、run_id、server_instance_id、用途=`reconnect`、snapshot_version 和 expiry。Backend 只在 Match 仍 InGame、Run 非终态且宽限期内签发。
 
-- `player_id`；
-- `match_id`；
-- `run_id`；
-- `server_instance_id`；
-- 过期时间；
-- 当前状态版本。
+Server 校验 Ticket 后按顺序：找到现有 run → 拒绝第二个活跃连接 → 重新绑定 Controller/PlayerState/Pawn → 发送当前完整快照 → Client 应用 UI/表现 → Server 标记 Connected。
 
-服务器收到重连请求后，先确认玩家仍属于对局，再发送完整快照或增量恢复数据。
+Client 旧版本不得覆盖 Server 新状态；恢复期间禁止 Fire/Inventory Command，直到收到 `restore_complete(snapshot_version)`。
 
-### 3. 设计结算事件
+测试：10 秒重连、89 秒重连、91 秒重连、同 Ticket 双开、重连前 Pawn 死亡、撤离成功后重连、恢复期间发背包命令。
 
-Dedicated Server 生成服务端可验证的结算事件：
+## 工作单元 3：权威结算与 SQLite 幂等事务
+
+Dedicated Server 生成：
 
 ```text
 SettlementEvent {
-  run_id
-  match_id
-  player_id
-  result
-  extracted_items
-  lost_items
-  server_instance_id
-  settlement_version
-  idempotency_key
+  idempotency_key, settlement_version,
+  server_instance_id, match_id, run_id, player_id,
+  result, extracted_items, lost_items, occurred_at
 }
 ```
 
-不要接受客户端自行上传“我击杀了多少人、我带出了什么”的最终结算结果。客户端可以上传遥测或表现数据，但奖励依据服务端状态。
+固定唯一约束：`UNIQUE(run_id, settlement_version)` 与 `UNIQUE(idempotency_key)`。新增 `settlement_events`、`player_rewards`、`inventory_ledger`，并扩展 runs 终态。
 
-### 4. 实现幂等消费
+一个短 transaction 中：
 
-采用：
+1. 验证 Server 身份与 Match/Run 关系；
+2. 尝试插入 settlement_event；
+3. 用条件更新 `runs SET status=终态 WHERE status='InProgress'`；
+4. 写 inventory_ledger 和 player_rewards；
+5. 保存可重复返回的响应；
+6. Commit。
 
-> 至少一次投递 + 服务端幂等消费 + 数据库唯一约束。
+遇到唯一冲突，读取原事件/响应并返回 `already_processed=true`；不得再次发奖。死亡和撤离竞争时，只有第一个合法 `InProgress -> Dead/Extracted` 获胜，后到事件记录 conflict 且不覆盖终态。
 
-推荐表：
+## 工作单元 4：Server 重试与明确失败状态
 
-- `settlement_events`；
-- `player_rewards`；
-- `runs`；
-- `inventory_ledger`。
+Server 结算发送采用至少一次：固定 idempotency_key，指数退避加抖动，最多例如 1/2/4/8/16 秒后进入 PendingRetry；进程关闭前把未确认事件写入本地受控 spool 文件，重启后重放。只有 Backend 返回不可重试的验证错误才进入 FailedManualReview。
 
-关键唯一约束可以是：
+区分：HTTP 超时/5xx/SQLite busy 可重试；401/403、schema invalid、Run conflict 不自动重试。响应丢失时保持同一 key，不创建新事件。
 
-```text
-unique(run_id, player_id, settlement_version)
-```
+日志含 request_id、match_id、run_id、idempotency_key、attempt、result，不记录完整物品隐私 payload 或密钥。
 
-或：
+## 工作单元 5：故障注入和自动化验收
 
-```text
-unique(idempotency_key)
-```
+固定实验：
 
-在同一个数据库事务中完成：写入结算事件、写入奖励流水、更新 Run 状态。处理重复请求时返回 `already_processed`，不要返回含糊的成功或失败。
+1. 同一结算顺序提交 10 次：一条 event、一组 reward/ledger；
+2. 10 goroutine 并发提交：只有一个 `processed`，其余 `already_processed`；
+3. DB Commit 后故意丢弃 HTTP 响应，再重试得到原结果；
+4. Extracted/Dead 几乎同时提交：终态只有一个；
+5. Backend 停止 20 秒再恢复：Server 用同 key 完成重试；
+6. Server 在 pending 时退出并重启：spool 重放一次；
+7. 撤离倒计时断线并在 90 秒内/外重连；
+8. Client 伪造 extracted_items：Server/Backend 不接受 Client 权威结算。
 
-### 5. 做故障注入
+每次实验运行 SQL 查询证明事件、奖励、流水计数和 Run 终态，而不仅看 HTTP 200。
 
-至少模拟：
+## 验收目标
 
-- 结算请求超时；
-- 数据库写成功但 HTTP 响应丢失；
-- 同一请求并发 10 次；
-- 成功结算后再次发送失败结算；
-- 玩家死亡和撤离请求几乎同时到达；
-- 玩家在撤离倒计时中断线；
-- Go 服务短暂不可用；
-- 客户端进程被杀死后重新启动。
+- [ ] 90 秒规则、Pawn 保留和受攻击行为明确；
+- [ ] 重连复用同一 Pawn/Run，不创建重复角色；
+- [ ] Health、Armor、装备、背包/version 和撤离状态恢复正确；
+- [ ] 终态 Run 重连不能更改结果；
+- [ ] 10 次顺序/并发结算只发奖一次；
+- [ ] Commit 后响应丢失可返回原处理结果；
+- [ ] Dead/Extracted 竞态只有一个终态；
+- [ ] Backend 不可用时有 PendingRetry/spool/Failed 状态；
+- [ ] Client 无法上传权威奖励。
 
 ## 实现原理
 
-网络系统很难在所有边界上保证严格的 exactly-once 传输。工程上更可靠的做法是允许消息至少到达一次，同时让业务处理具备幂等性。唯一键、状态机和事务共同保证最终结果不重复。
+网络无法可靠保证 exactly-once 传输，因此使用至少一次投递、固定幂等键、Server 权威事件、数据库唯一约束和单 transaction。重连恢复的是稳定业务身份和权威状态，而不是简单重开 Socket。
 
-重连的关键不是“重新连上 Socket”，而是恢复业务身份和对局状态。玩家的身份应由稳定的 `player_id` 绑定，当前对局由 `match_id/run_id` 绑定，恢复操作应检查状态版本。
+## 常见问题与停止条件
 
-## 常见问题
+- 重连生成第二个 Pawn：按 player_id/run_id 查现有实体后再绑定。
+- 背包恢复旧版本：Server 快照版本永远胜过 Client 缓存。
+- 奖励重复：事件、Run 终态、流水和响应必须在同一 transaction。
+- 重试换新 key：始终复用原 idempotency_key。
 
-### 为什么重试后奖励重复
-
-通常是“先发奖励，再记录已处理”，或者数据库没有唯一约束。把结果记录和奖励流水放进同一个事务，数据库约束作为最后一道保护。
-
-### 成功和失败结算同时到达
-
-使用明确的状态转移规则，例如 `InProgress -> Extracted` 或 `InProgress -> Dead`，终态只能写入一次，后到事件只能记录为冲突，不得覆盖终态。
-
-### 重连时恢复了旧背包
-
-给快照和操作增加版本号。服务器只接受当前版本范围内的恢复请求，客户端不能用旧快照覆盖新状态。
+重复奖励、终态覆盖或重连复制角色任一存在时，不进入性能与作品集阶段。
 
 ## 本周作品集产出
 
-- 重连状态机图；
-- 结算事件 schema；
-- 数据库唯一约束和事务说明；
-- 10 次重复结算的自动化测试结果；
-- 断线、重试、恢复的演示视频。
+- 重连状态机和恢复时序图；
+- Settlement schema/事务图；
+- 10 次并发结算测试输出；
+- 响应丢失与重放证据；
+- 断线重连视频。
 
 ## 参考资料
 
-- [Networking and Multiplayer](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-and-multiplayer-in-unreal-engine)
-- [Replication in Unreal Engine](https://dev.epicgames.com/documentation/en-us/unreal-engine/replication-in-unreal-engine)
-- [HTTP API](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/HTTP)
-- Go 标准库：[context](https://pkg.go.dev/context)、[database/sql](https://pkg.go.dev/database/sql)
-
+- [Unreal Networking](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-and-multiplayer-in-unreal-engine)
+- [Go context](https://pkg.go.dev/context)
+- [Go database/sql](https://pkg.go.dev/database/sql)

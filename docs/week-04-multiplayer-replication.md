@@ -2,129 +2,148 @@
 
 ## 本周目标
 
-把第 3 周的单机行为改成真正的客户端-服务器模式，重点理解角色复制、RPC、Ownership、Relevancy 和服务器权威。完成一个可以被面试官观察和追问的网络实验场。
+把第 3 周战斗回路放进独立 Dedicated Server + 两客户端环境，明确每个动作的发起者、执行者和观察者。伤害、死亡和弹药结果由服务器确认；客户端本地篡改不能改变最终状态。
+
+## 前置条件与周门槛
+
+- 第 3 周固定战斗序列在单机模式稳定通过。
+- 第 1 周双客户端启动命令仍可复现。
+- 本周不新增背包或撤离功能，只处理网络边界和实验记录。
+
+## 本周时间预算（15–20 小时）
+
+| 工作单元 | 内容 | 时间 |
+| --- | --- | ---: |
+| 1 | 网络角色与复制字段清单 | 3 小时 |
+| 2 | 服务器权威射击和校验 | 4–5 小时 |
+| 3 | 伤害、死亡、弹药和 UI 一致性 | 3–4 小时 |
+| 4 | 延迟、丢包、非法请求实验 | 3–4 小时 |
+| 5 | 回归、带宽初测和报告 | 2–4 小时 |
+
+## 先读什么
+
+- `Weapons/LyraGameplayAbility_RangedWeapon.*` 和 `LyraWeaponStateComponent.*`；
+- `AbilitySystem/LyraGameplayAbilityTargetData_SingleTargetHit.*`；
+- `Character/LyraHealthComponent.*` 与 PlayerState ASC 初始化；
+- `System/LyraReplicationGraph.*`；
+- UE Ownership、RPC、Replicated Property、Relevancy 和网络模拟文档。
+
+## 工作单元 1：网络角色和状态清单
+
+### 1.1 扩展调试 HUD/日志
+
+为本地 Pawn、瞄准目标和武器显示：Authority、LocalRole、RemoteRole、Owner Controller、PlayerState、NetMode。Dedicated Server 只写日志，不创建 Widget。
+
+### 1.2 给状态分类
+
+建立并评审表格：
+
+| 状态 | 权威位置 | 接收者 | 机制 |
+| --- | --- | --- | --- |
+| 输入意图 | Owning Client 发起 | Server | Ability/Server RPC |
+| 生命、死亡 | Server | 相关客户端 | GAS/复制属性 |
+| 弹药 | Server | Owner 为主 | Inventory/复制 |
+| 枪口与后坐 | 本地预测 | 本地/观察者表现 | 本地 + 必要 Cue |
+| 命中确认 | Server | 射手 | Client 消息/复制结果 |
+
+没有明确用途的字段不得标记 Replicated；不得用 Multicast 同步永久状态。
+
+## 工作单元 2：服务器权威射击
+
+沿用 Lyra Ranged Weapon Ability 的 TargetData/预测流程，不额外创建无 Ownership 的 RPC Actor。对每个射击请求验证：
+
+1. 请求来自拥有该 Pawn/ASC 的连接；
+2. 武器实例确实装备在该玩家；
+3. 玩家不是 Dead/Reloading 等阻断状态；
+4. Server 记录的弹药大于 0；
+5. Server 时间满足射速；
+6. 起点、方向、射程和客户端时间在容许范围；
+7. 命中目标在服务器世界中有效。
+
+拒绝日志统一包含：
+
+```text
+event=shot_rejected player_id=local-dev shot_id=... reason=fire_rate_limited
+```
+
+不得记录为模糊的 `invalid request`。客户端收到拒绝后取消错误命中反馈，并由真实弹药/状态覆盖预测显示。
+
+用两个 Client 验证：A 射击 B，只有 Server 应用 Damage Effect；B 的 Health 与死亡状态复制到双方。
+
+## 工作单元 3：最终状态一致性
+
+执行并观察：
+
+1. A 连续射击 B，记录 Server、A、B 三端 Health；
+2. B 死亡后继续发送 Fire，Server 拒绝；
+3. A 弹匣为空时连续点击，Server 弹药不为负；
+4. A 换弹时 B 击杀 A，换弹取消且不补发弹药；
+5. A 重建 HUD，生命和弹药从复制状态恢复。
+
+所有最终状态以 Server 日志为基准。允许枪口、动画短暂不同步，不允许生命、死亡和弹药永久分叉。
+
+加入每次测试的关联字段：`player_id` 暂用本地稳定开发 ID，`match_id` 暂用本次进程生成值，`shot_id` 由拥有客户端生成但由 Server 与玩家身份共同校验。
+
+## 工作单元 4：网络与非法请求实验
+
+### 4.1 固定三组网络条件
+
+使用 PIE Network Emulation 或 `NetEmulation`/项目适用控制台命令，记录实际生效值：
+
+- A：RTT 近似 0、无丢包；
+- B：单向延迟约 100 ms；
+- C：单向延迟约 100 ms、5% 丢包。
+
+每组执行相同的 10 发射击、一次换弹、一次死亡，并记录预测表现、Server 接收、最终一致性和恢复时间。
+
+### 4.2 非法请求
+
+仅在开发构建加入受控测试入口，依次提交：过快射击、零弹射击、不属于自己的武器、超长射线、Dead 状态射击、重复 shot_id。验证 Server 返回确定错误码且最终状态不变。测试后保留入口但限制为非 Shipping，或移除临时作弊节点。
+
+### 4.3 本地篡改
+
+在客户端调试器/开发命令中临时修改显示生命或弹药，确认下一次权威更新会纠正且 Server 值不变。不要通过真正制作作弊程序来完成本项。
+
+## 工作单元 5：复制成本与周验收
+
+使用 `stat net`、网络调试命令或 Network Profiler 记录空闲与战斗时：Actor 数、RPC 数、发送/接收速率。此周只建立基线，不做无数据优化。
+
+最终从关闭所有进程开始：启动 Server、两个 Client，完成加入、互相观察、A 击杀 B、延迟/丢包射击、非法请求、退出。保存三端日志和 1 分钟录屏。
 
 ## 验收目标
 
-- Dedicated Server 可以运行一局对局；
-- 两个客户端能同时加入并看到对方移动；
-- 开枪输入由客户端发起，伤害和死亡由服务器确认；
-- 客户端无法通过修改本地生命值、弹药或奖励直接改变最终状态；
-- 能展示 Server RPC、Client RPC、Multicast 或 Replicated Property 各自的用途；
-- 在模拟延迟和丢包时，系统不会重复扣血、重复发奖励或进入不可恢复状态；
-- 完成一份网络实验记录，包含现象、原因和修复方式。
-
-## 操作步骤
-
-### 1. 建立网络角色调试层
-
-在 HUD 或日志中显示：
-
-- `HasAuthority()`；
-- `GetLocalRole()`；
-- `GetRemoteRole()`；
-- Actor 所属 Controller；
-- 当前连接的 PlayerState；
-- 当前对局 ID。
-
-这样每次看到“为什么客户端不执行”时，先确认代码运行在哪一端。
-
-### 2. 给行为划分发起者和权威者
-
-以射击为例：
-
-```text
-本地输入
-  -> 客户端预测枪口和声音
-  -> Server RPC 提交射击意图/时间/瞄准信息
-  -> 服务器校验弹药、冷却、武器拥有权
-  -> 服务器检测命中并修改生命值
-  -> 复制生命值变化
-  -> 客户端播放确认后的受击/死亡表现
-```
-
-客户端可以立即播放表现，但不能直接写最终生命值、库存或结算奖励。
-
-### 3. 实现最小的服务器校验
-
-服务器至少校验：
-
-- RPC 的调用者是否拥有对应角色；
-- 武器是否属于调用者；
-- 当前是否处于可射击状态；
-- 射击间隔是否满足；
-- 弹匣是否还有弹药；
-- 请求中的方向和距离是否合理；
-- 是否超出服务器允许的时间窗口。
-
-失败时返回一个明确的失败原因，并记录结构化日志。不要静默忽略所有错误。
-
-### 4. 做三组网络实验
-
-实验 A：正常网络。记录两客户端移动、射击和死亡的行为。
-
-实验 B：增加延迟。观察客户端预测、服务器确认和最终修正。
-
-实验 C：模拟丢包或短暂断线。观察玩家状态、武器状态和 UI 是否能恢复。
-
-每组实验记录：
-
-- 网络参数；
-- 操作序列；
-- 客户端看到的状态；
-- 服务器看到的状态；
-- 最终是否一致；
-- 修复或接受的原因。
-
-### 5. 开始关注复制成本
-
-不要把整个库存、所有日志字段和临时表现变量都标记为 Replicated。区分：
-
-- 需要其他玩家看到的状态；
-- 只需要拥有者看到的状态；
-- 只在服务器内部存在的状态；
-- 只在本地表现的状态。
-
-为远处 Actor 和不相关 Actor 保留后续使用 Replication Graph 的空间。
+- [ ] 独立 Server 与两个 Client 稳定进入同一局；
+- [ ] 客户端只提交射击意图，Server 应用伤害与死亡；
+- [ ] Server 校验 Ownership、武器、状态、射速、弹药和方向；
+- [ ] 本地修改生命/弹药不能改变 Server 最终值；
+- [ ] 延迟和丢包下没有重复扣血、负弹药或永久分叉；
+- [ ] 非法请求有结构化拒绝日志；
+- [ ] 有正常、延迟、丢包三组可复现实验记录；
+- [ ] 有复制带宽初始基线。
 
 ## 实现原理
 
-Unreal 的多人模式不是“把变量同步过去”这么简单。RPC 解决的是事件或意图传递，Replication 解决的是状态传播；服务器权威解决的是最终可信来源。正确的设计通常是客户端发送意图，服务器执行规则，客户端接收结果。
+RPC/Ability TargetData 传递事件或意图，复制属性/GAS 传播状态。Ownership 决定客户端是否能向 Server 发起调用，Relevancy 决定谁需要收到 Actor。客户端预测追求即时手感，Server 权威保证最终可信；两者不能混成“客户端先写最终值再广播”。
 
-Ownership 决定谁有资格发送某些 RPC。Relevancy 决定某个客户端是否需要看到某个 Actor。把所有操作都做成 Multicast 会产生不必要的广播，也会让客户端拥有过多的控制权。
+## 常见问题与停止条件
 
-## 常见问题
+- Server RPC 不执行：查调用对象 Ownership、复制建立时机、调用端和参数可复制性。
+- 双方结果不同：先区分表现差异与最终状态差异，再查 Server 是否真正修改权威数据。
+- 延迟下双发：用 shot_id 对齐输入、预测和确认，不增加无依据的延时。
+- Server 被请求淹没：做频率/状态校验，Reliable 不应承载高频可丢事件。
 
-### Server RPC 没有执行
-
-检查：
-
-- 调用对象是否被当前客户端拥有；
-- RPC 是否声明在正确的 Actor/Component 上；
-- 是否在客户端对象上调用；
-- Actor 是否已经复制和建立连接；
-- 函数参数是否可复制。
-
-### 两个客户端看到的结果不一致
-
-先判断是表现不同还是最终状态不同。表现可以因延迟不同而不同，但最终生命值、死亡、库存和结算必须以服务器状态为准。
-
-### 服务器被客户端请求打爆
-
-对 RPC 做频率限制、状态校验和参数边界检查。日志中记录调用者、请求类型、频率和失败原因。
+最终状态在任一网络条件下不能收敛时，不进入 GAS 扩展。
 
 ## 本周作品集产出
 
-- 两客户端 + Dedicated Server 演示视频；
-- 一张射击请求的时序图；
-- 一份网络实验报告；
-- 一段展示非法客户端请求被服务器拒绝的日志；
-- 一篇“RPC 与 Replicated Property 的取舍”文章。
+- 双 Client + Dedicated Server 视频；
+- 射击权威时序图；
+- 三组网络实验报告；
+- 非法请求拒绝日志；
+- RPC 与 Replicated Property 取舍说明。
 
 ## 参考资料
 
-- [Multiplayer Programming Quick Start](https://dev.epicgames.com/documentation/en-us/unreal-engine/multiplayer-programming-quick-start-for-unreal-engine)
-- [Networking and Multiplayer](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-and-multiplayer-in-unreal-engine)
+- [Networking Overview](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine)
+- [RPC](https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine)
 - [Replication Graph](https://dev.epicgames.com/documentation/en-us/unreal-engine/replication-graph-in-unreal-engine)
-- [Unreal Engine Replication](https://dev.epicgames.com/documentation/en-us/unreal-engine/replication-in-unreal-engine)
-
