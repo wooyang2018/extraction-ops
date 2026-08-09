@@ -1,0 +1,56 @@
+# Unreal Engine generated files
+Binaries/
+**/Binaries/
+DerivedDataCache/
+Intermediate/
+**/Intermediate/
+Saved/
+
+# Unreal assets are kept outside this source/config/docs baseline.
+Content/
+**/Content/
+*.replay
+Build/EditorPerfStats.csv
+
+# Generated IDE and project files
+.vs/
+.idea/
+.codex/
+.vscode/
+*.sln
+*.slnx
+*.suo
+*.user
+*.userosscache
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.csproj.user
+*.DotSettings.user
+
+# Generated build-script artifacts
+Build/Scripts/bin/
+Build/Scripts/obj/
+Build/Scripts/uatobj/
+
+# Build outputs and compiler artifacts
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
+*.exp
+*.lib
+
+# Local configuration and credentials
+.env
+.env.*
+*.secret
+*.secrets
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Operating-system files
+.DS_Store
+Thumbs.db
