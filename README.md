@@ -19,12 +19,23 @@
 - `Plugins/ExtractionOps/`：项目新增功能的主要落点
 - `Source/`、`Config/`：Unreal 项目代码与配置
 - `Build/`：构建和自动化脚本
+- `Scripts/`：本地资源初始化和工程准备脚本
 
 ## 开始使用
 
-1. 使用 Unreal Engine 5.8 打开 `LyraStarterGame.uproject`。
-2. 安装项目要求的 Visual Studio C++ 工具链。
-3. 通过 Unreal Editor 或 Rider 编译并运行项目。
+1. 安装 Unreal Engine 5.8 和项目要求的 Visual Studio C++ 工具链。
+2. 通过 Epic Games Launcher/Fab 创建同版本的 Lyra Starter Game。
+3. 执行资源初始化脚本：
+
+   ```powershell
+   .\Scripts\Initialize-ExtractionOps.ps1 -LyraProject 'C:\Samples\LyraStarterGame'
+   ```
+
+   也可以直接双击 `Scripts\Initialize-ExtractionOps.ps1`。脚本会依次提示 Lyra 项目目录、Unreal Engine 目录，以及是否编译和启动编辑器；资源会自动复制到当前工作区。
+
+4. 用 Rider 或 Unreal Editor 编译并运行项目。
+
+脚本会将 Lyra 资源复制到当前工作区，并保留在 `.gitignore` 排除范围内。脚本支持 UnrealVersionSelector、GenerateProjectFiles.bat 以及新版 UE 自带的 UnrealBuildTool。完整说明见 [`docs/asset-bootstrap.md`](docs/asset-bootstrap.md)。
 
 当前仓库基线只纳入源码、配置、构建脚本和文档。`Content/` 资产以及 `Binaries/`、`Intermediate/`、`Saved/`、`DerivedDataCache/` 等生成内容保留在本地，后续如需分发再单独规划资源仓库或 Git LFS。
 
