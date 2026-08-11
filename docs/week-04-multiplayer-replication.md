@@ -4,6 +4,30 @@
 
 把第 3 周战斗回路放进独立 Dedicated Server + 两客户端环境，明确每个动作的发起者、执行者和观察者。伤害、死亡和弹药结果由服务器确认；客户端本地篡改不能改变最终状态。
 
+## 与总蓝图同步：Dedicated Server 双客户端证据
+
+这一周验证实时玩法网络边界；第 9 周再接 Backend 房间、Ticket、注册和心跳。当前 Installed Build 不支持 Server Target，必须先完成第 1 周源码引擎门槛。
+
+固定启动拓扑：
+
+```text
+LyraServer（独立进程，无本地玩家）
+  <- Client A（拥有自己的 Pawn/PlayerController）
+  <- Client B（拥有自己的 Pawn/PlayerController）
+```
+
+按以下顺序建立证据：
+
+1. 构建 Development Server/Client，保存完整命令与 commit；
+2. Server 显式加载灰盒地图和 Extraction Experience；
+3. 两个 Client 分别连接，日志记录唯一连接与 PlayerState；
+4. A/B 互相观察移动、装备、射击、伤害、死亡；
+5. 分别加入 100 ms 延迟、5% 丢包，重复固定操作序列；
+6. 尝试客户端伪造命中、弹药和死亡结果，记录服务器拒绝原因；
+7. 用 Network Profiler 记录空闲、交战和高频射击三个片段。
+
+验收报告至少包含：进程启动命令、三端日志时间线、Authority/Ownership 表、一次非法请求、一次延迟丢包实验，以及最终状态是否收敛。只在 Editor 多人 PIE 中通过不能替代独立 Server 证据。
+
 ## 前置条件与周门槛
 
 - 第 3 周固定战斗序列在单机模式稳定通过。

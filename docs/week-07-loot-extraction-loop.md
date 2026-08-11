@@ -4,6 +4,34 @@
 
 把战斗和背包串成一局完整 Vertical Slice：进入测试地图、搜刮地面物品/容器、战斗、撤离或死亡、查看本局结果。交互、倒计时、掉落和结果全部由 Dedicated Server 决定。
 
+## 与当前实现同步：灰盒、终端、撤离和 Threat AI
+
+已经存在的代码不要重写：`UExtractionMatchStateComponent`、`UExtractionRunStateComponent`、`AExtractionSignalTerminal`、`AExtractionZone` 以及对应 Blueprint。当前缺少的是把它们放入专属 Experience/地图，并接入交互、AI、HUD 和结果流程。
+
+### 灰盒地图合同
+
+正式 Slice 地图目标为 12–15 分钟，包含 3 条主路线、3 个信号终端、4 个物资区、2 个撤离区和 1 个高风险地标。不要一次完成整图，按三次迭代：
+
+1. **五分钟玩法房**：一个出生点、一个交战区、一个终端、两个小物资点、一个撤离区，验证核心选择；
+2. **路线灰盒**：扩成三条可辨识路线和两个撤离区，检查交叉火力、掩体间距、回撤路径和导航；
+3. **完整 Slice**：放齐三个终端和物资区，再用路标、灯光和音频建立空间辨识，不提前美术精修。
+
+服务器在 `StartRaid` 时从两个 ZoneId 中选择一个有效撤离区；终端未激活时两个区都保持 `Locked`。第一个终端完成后，只把选中区变为 `Available` 并向客户端显示。
+
+### Threat 驱动 AI
+
+先建立一个服务器 `Threat Director`，只监听 MatchState Snapshot，不让终端 Blueprint 直接生成 AI。三档行为固定为：
+
+| Threat | AI 调度 | 玩家可感知线索 |
+| --- | --- | --- |
+| Low / 终端 1 | 小规模响应，巡逻射手向终端附近调查 | 远处无线电、脚步或枪声方向 |
+| High / 终端 2 | 增援，侧翼突击者使用 EQS 寻找侧后位置 | 更近的呼叫和侧翼路线压力 |
+| Critical / 终端 3 | 生成一名精英猎手并加强撤离区压力 | 明确精英音频和视觉标识 |
+
+三类 AI 共用感知、阵营、伤害与基础移动，只让决策方式不同。先用 Behavior Tree 或 StateTree 完成 `Patrol -> Investigate -> Engage -> Search -> Return`，侧翼点交给 EQS。Director 设置全局数量上限、生成冷却和离玩家最小距离，禁止每次 Snapshot 通知重复生成同一波次。
+
+AI 验收不是“会开枪”，而是玩家能从行为和线索感知 Threat 升高，并至少一次因为 AI 压力改变“继续扫描还是撤离”的决定。
+
 ## 前置条件与周门槛
 
 - 第 6 周不存在物品复制、实例 ID 丢失或背包版本回退。
@@ -14,11 +42,12 @@
 
 | 工作单元 | 内容 | 时间 |
 | --- | --- | ---: |
-| 1 | 对局状态机与测试地图 | 3–4 小时 |
-| 2 | 通用交互与战利品容器 | 4 小时 |
-| 3 | 撤离点与服务器倒计时 | 4 小时 |
-| 4 | 死亡掉落与结果界面 | 3–4 小时 |
-| 5 | 完整对局、并发和断网测试 | 2–4 小时 |
+| 1 | 对局状态机与五分钟玩法房 | 3 小时 |
+| 2 | 通用交互与战利品容器 | 3 小时 |
+| 3 | 撤离点与服务器倒计时 | 3 小时 |
+| 4 | Threat Director、三类 AI 与 EQS | 4 小时 |
+| 5 | 死亡掉落与结果界面 | 2–3 小时 |
+| 6 | 完整对局、并发和断网测试 | 2–3 小时 |
 
 ## 先读什么
 
@@ -32,15 +61,15 @@
 固定状态：
 
 ```text
-Lobby -> Loading -> InRaid -> Results
+Match：Loading -> InRaid -> Completed
 玩家 Run：InRaid -> Extracting -> Extracted
               |          -> InRaid（取消）
-              -> Dead
+              -> Dead | Abandoned
 ```
 
 `match_id` 标识一局，`run_id` 标识一名玩家在该局中的运行。MatchState 放 GameState/权威组件，玩家 RunState 放 PlayerState/专属组件；不要把每个玩家的 Extracting 当作全局 MatchState。
 
-创建 `L_ExtractionTest`：一个出生区、三处 Loot、一个容器区、一个交战区、一个撤离区。使用现有 Lyra 几何和导航资产，保证两个玩家 3–5 分钟能走完。
+先创建 `L_ExtractionTest` 五分钟玩法房；核心选择通过后再按本节地图合同扩展。使用现有 Lyra 几何和导航资产，确保路线、掩体和 AI 导航先可验证。
 
 配置 Extraction Experience 和 Server 启动路径。通过标准：独立 Server + 两 Client 稳定加载地图，生成唯一 match_id/run_id。
 
@@ -54,12 +83,11 @@ Lobby -> Loading -> InRaid -> Results
 
 ## 工作单元 3：服务器权威撤离点
 
-创建 `AExtractionZone`，状态为：
+复用现有 `AExtractionZone`，状态为：
 
 ```text
-Closed -> Available -> Countdown -> Extracted
-                         -> Cancelled
-                         -> Failed
+Locked -> Available -> Countdown -> Extracted
+                          -> Cancelled
 ```
 
 Server 保存每位玩家的 `extraction_end_server_time`，固定倒计时 10 秒。开始时校验：RunState=InRaid、Pawn 存活、处于区域、Zone Available、match_id/run_id 匹配。倒计时中每次离开区域、死亡或对局结束都取消。
@@ -68,7 +96,13 @@ Server 保存每位玩家的 `extraction_end_server_time`，固定倒计时 10 �
 
 测试客户端改系统时间、暂停 UI、重复 BeginExtraction、最后 0.1 秒离开区域；只有 Server Timer 决定结果。
 
-## 工作单元 4：死亡掉落与结果界面
+## 工作单元 4：Threat Director 与三类 AI
+
+按本页 Threat 表完成最小 Director。第一步只监听 `OnSnapshotChanged` 并记录“本次 Threat 是否已经调度”；第二步接入 AI Spawn Point 和全局数量上限；第三步分别配置巡逻射手、侧翼突击者和精英猎手。所有生成与行为决策只在 Server 执行，客户端只接收必要 Actor/动画/音频表现。
+
+固定测试：每档 Threat 只触发一次对应升级；已有 AI 不因重复 OnRep 重生；侧翼 EQS 无合法点时回退到普通掩体/接近；精英死亡不重复发奖励；撤离开始后 AI 压力符合当前 Threat 而非本地 UI 值。
+
+## 工作单元 5：死亡掉落与结果界面
 
 固定 MVP 规则：死亡时本局背包内所有可掉落物转移到一个 `death_container_id`；当前装备也按 Definition 的 droppable 配置处理。死亡事件生成唯一 `death_event_id`，重复回调只返回已处理。
 
@@ -76,7 +110,7 @@ Server 在一个权威流程中：RunState `InRaid/Extracting -> Dead` → 取�
 
 结果界面只展示 Server 快照：result、带出/丢失物品、结束时间、match_id/run_id。本周暂存内存；Backend 不可用概念从第 8 周加入。
 
-## 工作单元 5：完整对局与故障实验
+## 工作单元 6：完整对局与故障实验
 
 从关闭进程开始执行：
 

@@ -4,6 +4,30 @@
 
 基于 Lyra Inventory/Equipment 实现服务器权威的简单槽位背包：稳定物品定义、唯一实例、拾取、移动、堆叠、拆分、装备、使用、丢弃和 UI。对局外永久仓库仍留给第 8–10 周 Backend。
 
+## 与总蓝图同步：战利品与 12 格背包
+
+本 Slice 的内容合同是 12 格本局背包、2 类主武器、1 个治疗物品和 8 种三档价值战利品。第一版不要实现重量、嵌套容器、俄罗斯方块占格、制作或交易。
+
+建议把物品分成三类：
+
+```text
+Equipment：两把主武器及其必要弹药/装备引用
+Consumable：一个治疗物品，通过 GAS Ability 使用
+Valuable：8 种战利品，只包含 tier、base_value、图标和显示文本
+```
+
+实现路径：
+
+1. 复用 Lyra ItemDefinition、ItemInstance、InventoryManager、Equipment/QuickBar；
+2. 只新增 Extraction 的价值、可掉落、结算分类等 Fragment；
+3. 用服务器生成的 `item_instance_id` 标识运行时物品，不用资产路径充当实例 ID；
+4. 地面 → 背包、背包 → 装备、背包 → 丢弃都必须是“一个来源删除、一个目标增加”的服务器原子变换；
+5. Owner Only 复制完整背包，其他玩家只接收手中武器和地面物品表现；
+6. 治疗物品的扣除与治疗 Ability 使用同一服务器提交点，Ability 失败不得消耗物品；
+7. 撤离成功生成带出清单，死亡生成丢失/掉落清单，但永久仓库仍不在本周写入。
+
+每个命令都记录 `request_id`、`item_instance_id`、`expected_version` 和结果码。重点验证两人争抢同一物品、响应乱序、背包满、治疗中死亡、重复丢弃和重复拾取。
+
 ## 前置条件与周门槛
 
 - 第 5 周 GAS 属性和死亡状态在两客户端一致。
@@ -42,13 +66,40 @@ PersistentStash：Backend 持久化对象，本周不实现
 
 `instance_id` 由 Server 创建，使用 UUID/Guid 字符串；相同 Definition 的两个物品仍有不同 ID。堆叠时保留一个实例并调整数量，拆分时由 Server 生成新实例 ID。
 
-固定 16 个槽位、同类物品最大堆叠取 Definition 配置。三类测试物品：Rifle、RifleAmmo、Medkit。容量只按槽位判定。
+固定 12 个槽位、同类物品最大堆叠取 Definition 配置。容量只按槽位判定。资产清单固定如下，后续不得用“先创建三个”省略正式内容：
+
+```text
+Weapons（复用第 3 周）
+  DA_ExtractionRifle
+  DA_ExtractionShotgun
+
+Support（不计入 8 种价值战利品）
+  DA_Ammo_Rifle
+  DA_Ammo_Shells
+  DA_Item_Medkit
+
+Valuable Tier 1
+  DA_Valuable_ScrapMetal
+  DA_Valuable_PowerCell
+  DA_Valuable_CircuitBoard
+
+Valuable Tier 2
+  DA_Valuable_OpticModule
+  DA_Valuable_ServoMotor
+  DA_Valuable_EncryptedDrive
+
+Valuable Tier 3
+  DA_Valuable_ReactorCore
+  DA_Valuable_PrototypeChip
+```
+
+名称可以在真正创建资产前统一调整一次，但数量、类别和三档价值分布保持不变。弹药是武器运行资源，不算作八种可结算 Valuable。
 
 ## 工作单元 2：物品资产与地面拾取
 
 ### 2.1 创建定义
 
-在 `Content/Items` 创建三个 ItemDefinition，使用 Fragment 配置图标、显示名、最大堆叠、装备定义或使用 Ability。不要把显示名/图标复制到 Pickup Blueprint。
+按上面的完整清单创建或复用 ItemDefinition：两把武器引用第 3 周资产；新增两类弹药、一个 Medkit 和八个 Valuable。使用 Fragment 配置图标、显示名、最大堆叠、装备定义、价值档位或使用 Ability。不要为八种 Valuable 创建八套 C++ 类，也不要把显示名/图标复制到 Pickup Blueprint。
 
 ### 2.2 创建 WorldPickup
 

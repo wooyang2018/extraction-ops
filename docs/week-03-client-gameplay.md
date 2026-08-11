@@ -4,10 +4,35 @@
 
 复用 ShooterCore 已有 Experience、Pawn、GAS 武器、QuickBar 和 HUD，做出 ExtractionOps 的单机战斗回路：进入地图、移动、瞄准、射击、换弹、命中、受伤、死亡。本周只建立客户端体验基线；权威网络校验在第 4 周完成。
 
+## 与总蓝图同步：两把武器和枪感
+
+本周最终只保留两类主武器，建议用“稳定易控的突击步枪”和“近距离高爆发武器”形成明确差异。先复用 Lyra 武器链，只有项目差异进入 ExtractionOps。
+
+每把武器建立一张调参表：
+
+| 维度 | Rifle 基线 | 近战主武器基线 | 验证方式 |
+| --- | --- | --- | --- |
+| 有效距离 | 中距离 | 近距离 | 10/25/50 米靶位 |
+| 射击方式 | 自动或点射 | 低射速高伤害 | 固定弹匣击杀时间 |
+| 后坐与散布 | 连射逐步扩大 | 单发冲击明显 | 录制准星和弹着分布 |
+| 命中反馈 | 稳定、清楚 | 更强音画冲击 | 无 HUD 时也能判断命中 |
+| 换弹风险 | 中等 | 明显空窗 | AI 压迫下是否需要找掩体 |
+
+实现顺序固定为：
+
+1. 跑通原始 Lyra Rifle，记录输入到伤害的调用链；
+2. 创建两个 Item/Equipment/Weapon 配置，只改数据，不复制整套 Ability；
+3. 调整镜头 FOV、瞄准过渡、移动时散布、连续射击后坐；
+4. 补齐枪口、弹道/命中、受击方向、音效和轻微镜头反馈；
+5. 处理射击、换弹、切枪、治疗和死亡之间的动画/Ability 阻断；
+6. 在相同靶场各录制三轮，依据可测数据调参，不凭一次手感判断。
+
+完成门槛：两把武器在轮廓、距离、节奏和风险上能被测试者明确区分；连续战斗 5 分钟没有输入重复绑定、弹药负数、动画卡死或 HUD 状态滞留。
+
 ## 前置条件与周门槛
 
 - 第 2 周 `ExtractionOps` Feature 能加载和停用，默认 Lyra 无回归。
-- 本周新增内容全部放在 `Plugins/ExtractionOps/Content` 或其运行时模块；复制资产时保留对 ShooterCore 公共资产的引用。
+- 本周新增内容全部放在 `Plugins/GameFeatures/ExtractionOps/Content` 或 `ExtractionOpsRuntime`；复制资产时保留对 ShooterCore 公共资产的引用。
 - 不新建第二套角色移动、ASC、Inventory 或武器框架。
 
 ## 本周时间预算（15–20 小时）
@@ -52,6 +77,7 @@ Content/Pawns/DA_ExtractionPawnData
 Content/Input/DA_ExtractionInputConfig
 Content/UI/W_ExtractionHUDLayout
 Content/Weapons/DA_ExtractionRifle
+Content/Weapons/DA_ExtractionShotgun
 ```
 
 名称可依项目资产前缀规则调整，但文档和录屏中保持一致。PawnData 复用现有 Character/Pawn 类与动画，不复制模型和动画蓝图。
@@ -70,7 +96,9 @@ Content/Weapons/DA_ExtractionRifle
 
 ### 2.3 武器数据
 
-从现有 Rifle ItemDefinition/EquipmentDefinition 派生最小配置，集中记录射速、弹匣容量、散布、射程、伤害 Effect 和准星。运行时状态继续由 Lyra WeaponInstance/Inventory 管理，不在 Data Asset 保存当前弹药。
+从现有 Rifle ItemDefinition/EquipmentDefinition 派生两个最小配置：`DA_ExtractionRifle` 是中距离、稳定连射基线；`DA_ExtractionShotgun` 是近距离、低射速高爆发基线。分别记录射速、弹匣容量、散布/弹丸数、射程、伤害 Effect、准星、后坐和换弹时间。运行时状态继续由 Lyra WeaponInstance/Inventory 管理，不在 Data Asset 保存当前弹药。
+
+两把武器都必须有对应 ItemDefinition、EquipmentDefinition、WeaponInstance 配置和弹药 Definition；复用同一 C++/Ability 框架，只通过数据、动画和表现形成差异，不复制两套射击逻辑。
 
 通过标准：Extraction Experience 使用自己的 PawnData/InputConfig/HUD，但底层 Lyra 战斗能力仍正常。
 

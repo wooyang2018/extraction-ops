@@ -1,0 +1,36 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Extraction Ops",
+	"Description": "Server-authoritative extraction gameplay systems built on Lyra.",
+	"Category": "Game Features",
+	"CreatedBy": "Extraction Ops",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"ExplicitlyLoaded": true,
+	"EnabledByDefault": false,
+	"BuiltInInitialFeatureState": "Registered",
+	"Modules": [
+		{
+			"Name": "ExtractionOpsRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "ModularGameplay",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayMessageRouter",
+			"Enabled": true
+		}
+	]
+}

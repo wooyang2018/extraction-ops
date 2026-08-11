@@ -4,6 +4,18 @@
 
 把前 11 周整理为陌生人能运行、能理解、能验证和能追问的求职作品。交付物包括最短启动路径、3 分钟真实演示、架构与时序图、性能/故障证据、简历描述、5 分钟讲解稿和模拟面试答案。
 
+## 与总蓝图同步：作品质量和外测门槛
+
+包装不能替代可玩性验证。最终至少邀请 8 名未参与开发的测试者，每人玩 3 局，并记录：
+
+- 第二局起能否无需提示解释终端、Threat 与撤离关系；目标至少 70%；
+- 能否复述一次真实的“继续扫描还是撤离”决策；目标至少 60%；
+- 乐趣与紧张感评分中位数是否达到 4/5；
+- 哪个音频/UI/AI 行为让其理解 Threat，哪个地方造成误解；
+- 每局时长、终端数量、死亡/撤离结果和明显故障。
+
+3 分钟视频优先展示本项目身份：终端 1 解锁撤离、玩家继续启动终端 2、Threat AI 侧翼施压、玩家带战利品撤离。网络、后台和性能证据紧随其后。不要让通用 Lyra 射击占据大部分时长。
+
 ## 前置条件与周门槛
 
 - 第 11 周端到端冒烟、重连和 Settlement 一致性全部通过。
@@ -22,7 +34,7 @@
 
 ## 先读什么
 
-- 根 `README.md`、`docs/00-roadmap.md` 和前 11 周作品集产出；
+- 根 `README.md`、`docs/README.md` 和前 11 周作品集产出；
 - 所有启动脚本参数与 `.gitignore`；
 - 第 10 周重连/结算报告、第 11 周性能报告；
 - Git diff/历史，用于区分 Lyra 基线和个人新增内容。
@@ -33,7 +45,7 @@
 
 只通过正常编辑移除已确认无用的实验代码/文档；不要清理不属于本项目的用户文件。检查并排除：绝对路径、Token/密钥、SQLite data、Saved/Intermediate/Binaries、无法运行的半成品、过期截图。
 
-运行密钥和路径搜索，逐项人工判断，不把测试用 `player_id` 误报为密钥。确认公开仓库仍不分发 Lyra Content，并链接 `asset-bootstrap.md`。
+运行密钥和路径搜索，逐项人工判断，不把测试用 `player_id` 误报为密钥。确认公开仓库不分发 Lyra 原始/授权受限 Content，并链接 `asset-bootstrap.md`；同时确认 `Plugins/GameFeatures/ExtractionOps/Content/**` 中的自研 GameFeatureData、Blueprint 和其他可分发资产已经进入版本控制。
 
 ### 1.2 写“最快成功路径”
 
@@ -73,7 +85,7 @@ README 按顺序包含：项目一句话、演示、已实现功能、架构、�
 
 ```text
 多人撤离射击 Vertical Slice | UE5 / C++ / Lyra / GAS / Go
-- 扩展 Lyra GameFeature，完成 2–4 人专服战斗、搜刮、背包、撤离闭环。
+- 扩展 Lyra GameFeature，完成 1–2 人合作专服战斗、搜刮、背包、Threat 与撤离闭环。
 - 由 Dedicated Server 权威校验伤害、物品和撤离，以短期 Ticket 连接 Go 控制面。
 - 使用稳定 ID、SQLite transaction/唯一约束实现重连恢复和结算幂等。
 - 使用结构化日志、Unreal Insights 和网络分析完成故障定位及量化优化。
@@ -98,7 +110,7 @@ README 按顺序包含：项目一句话、演示、已实现功能、架构、�
 - [ ] README 明确 Lyra 基线与个人新增内容；
 - [ ] 简历和 5 分钟稿无夸大、无无法解释指标；
 - [ ] 10 个追问均有 60–90 秒证据化回答；
-- [ ] 密钥、本地 DB、生成物和授权受限 Content 未提交；
+- [ ] 密钥、本地 DB、生成物和 Lyra/授权受限 Content 未提交，ExtractionOps 自研 Content 已提交；
 - [ ] 项目限制明确：本地 SQLite、单机调度、开发态身份、非生产反作弊。
 
 ## 实现原理
@@ -127,4 +139,4 @@ README 按顺序包含：项目一句话、演示、已实现功能、架构、�
 
 - [Lyra Sample Game](https://dev.epicgames.com/documentation/en-us/unreal-engine/lyra-sample-game-in-unreal-engine)
 - [Unreal Insights](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-insights-in-unreal-engine)
-- [项目路线](00-roadmap.md)
+- [项目总览与路线](README.md)

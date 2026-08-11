@@ -4,6 +4,26 @@
 
 把工程从“偶尔能打开”变成可重复验证的 UE 5.8 开发基线：能够初始化 Lyra 资源、生成项目文件、分别构建 Editor/Client/Server、启动独立 Dedicated Server，并让两个客户端进入同一局。本周不添加玩法。
 
+## 与当前工程同步（先读）
+
+当前已经完成 `LyraEditor Win64 Development` 构建，并通过 Unreal Editor MCP 运行了 ExtractionOps 自动化测试和 PIE 组件注入验证。不要重新创建工程或覆盖现有插件。
+
+当前硬门槛是 `D:\Software\UE_5.8\Engine\Build\InstalledBuild.txt` 表明该引擎是 Installed Build，执行 `LyraServer Win64 Development` 会返回：
+
+```text
+Server targets are not currently supported from this engine distribution.
+```
+
+因此本周真正要完成的不是修改游戏代码，而是准备“支持 Server Target 的 UE 5.8 源码构建”，然后依次验证：
+
+1. 用新引擎构建 `LyraEditor`，确认项目与插件没有版本偏差；
+2. 构建 `LyraServer` 和 `LyraClient`；
+3. Server 独立进程加载 Lyra 基线地图；
+4. 两个 Client 直连同一 Server；
+5. 保存三个进程的命令、日志和版本信息。
+
+只有上述五项全部通过，才把第 1 周标记完成。当前事实与后续变化同步记录在 [实施状态](implementation-status.md)。
+
 ## 前置条件与路径约定
 
 - Windows 11、Epic Games Launcher、Unreal Engine 5.8 和 Visual Studio 2022 已安装。
@@ -57,7 +77,7 @@ UE 版本与路径：
 Visual Studio 版本：
 MSVC/Windows SDK：
 LyraSource：
-资源模式：Junction 或 CopyAssets：
+资源模式：CopyAssets：
 ```
 
 用以下命令获取可复制的信息：
@@ -67,7 +87,32 @@ git rev-parse HEAD
 & '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' -Version
 ```
 
-### 1.2 初始化 Lyra 资源
+### 1.2 启用 Codex 的 MCP 工具（可选）
+
+如果本周使用 Codex 调用本地开发工具，先启动 Model Context Protocol（MCP）Server，再刷新 Codex 的工具清单。MCP Server 负责提供工具端点；Codex 刷新后才能发现新增、删除或更新过的工具。刷新工具不会代替启动 Server，Server 启动也不代表 Codex 已经拿到最新工具定义。
+
+在提供 `ModelContextProtocol` 命令的 IDE/宿主中，按以下顺序执行：
+
+```text
+ModelContextProtocol.StartServer
+ModelContextProtocol.RefreshTools Codex
+```
+
+验证：
+
+- [ ] `StartServer` 执行后没有启动失败或端口占用错误；
+- [ ] `RefreshTools Codex` 完成后，Codex 能看到预期的 MCP 工具；
+- [ ] 工具调用指向当前仓库和当前测试环境，没有误连生产环境；
+- [ ] 环境记录中写下 Server 名称、工具清单版本和本次刷新时间。
+
+常见问题：
+
+- Codex 看不到工具：先重新执行 `ModelContextProtocol.StartServer`，确认 Server 仍在运行，再执行 `ModelContextProtocol.RefreshTools Codex`；
+- 工具清单是旧的：配置或工具代码变更后重新刷新，必要时重启宿主；
+- Server 启动失败：检查端口占用、工作目录、依赖和权限，不要把 Token、密钥或本机绝对路径写入仓库；
+- 工具能看到但调用失败：区分“工具发现成功”和“工具运行成功”，保存调用参数、错误和对应 Server 日志。
+
+### 1.3 初始化 Lyra 资源
 
 关闭 Unreal Editor，再执行：
 
@@ -78,16 +123,16 @@ Set-Location '<RepoRoot>'
   -EngineRoot '<UE_ROOT>'
 ```
 
-初学阶段使用默认 Junction 模式；它不会复制约 2 GB 资源。不要在来源不明时使用 `-CopyAssets`。
+当前初始化脚本使用复制模式，将 Lyra 根 `Content/` 和仓库中对应插件的 `Content/` 复制到当前工作区；脚本不创建 Junction，也没有 `-CopyAssets` 参数。复制得到的 Lyra 原始 `Content/` 继续由 `.gitignore` 排除，修改不会回写 `LyraSource`；项目自研的 `Plugins/GameFeatures/ExtractionOps/Content/**` 已被显式豁免并必须进入版本控制。
 
-### 1.3 验证结果
+### 1.4 验证结果
 
 - [ ] 脚本识别到 UE 5.8 与 Lyra 5.8。
 - [ ] 根 `Content` 和需要的插件内容可访问。
 - [ ] `LyraStarterGame.uproject` 未被替换成别的版本。
 - [ ] `git status --short` 没有出现大批 `.uasset`、`Binaries` 或 `Intermediate`。
 
-失败时按顺序检查：LyraSource 是否包含 `.uproject` → 版本是否一致 → Editor 是否占用目录 → PowerShell 执行策略 → Junction 目标是否存在。不要手工复制一半资源后继续。
+失败时按顺序检查：LyraSource 是否包含 `.uproject` → 版本是否一致 → Editor 是否占用目录 → PowerShell 执行策略 → 目标资源目录是否已存在且不是错误的重解析点。不要手工复制一半资源后继续。
 
 ## 工作单元 2：生成项目文件并构建 Editor
 
@@ -206,9 +251,10 @@ Set-Location '<RepoRoot>'
 ```powershell
 git status --short --ignored
 git check-ignore Binaries Intermediate Saved Content
+git check-ignore -v Plugins/GameFeatures/ExtractionOps/Content/ExtractionOps.uasset
 ```
 
-确认生成目录和本地 Lyra 资产不会进入提交。不得提交账号、EOS 凭据、本机绝对引擎路径或 Saved 日志。
+确认生成目录和本地 Lyra 资产不会进入提交，同时确认最后一条命令命中 `.gitignore` 中的 `!Plugins/GameFeatures/ExtractionOps/Content/**` 否定规则，自研资产出现在 `git status`。不得提交账号、EOS 凭据、本机绝对引擎路径或 Saved 日志。
 
 ### 5.2 保存证据
 
@@ -229,7 +275,7 @@ git check-ignore Binaries Intermediate Saved Content
 - [ ] `LyraClient` 与 `LyraServer` Target 可构建，或已明确记录 Cook 限制和 Editor 进程替代方案；
 - [ ] 独立 Server 监听 7777，两个客户端能进入同一局；
 - [ ] 原始 Lyra 战斗回路可以稳定运行；
-- [ ] Git 不追踪生成目录、内容资产和本机密钥；
+- [ ] Git 不追踪生成目录、Lyra 原始 Content 和本机密钥，但追踪 ExtractionOps 自研 Content；
 - [ ] 陌生人只看记录就能重复本周流程。
 
 ## 实现原理

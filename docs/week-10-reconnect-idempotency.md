@@ -4,6 +4,35 @@
 
 让网络和 HTTP 请求可以重复、最终结果不能重复：玩家断线后 90 秒内恢复同一 Pawn/Run；Dedicated Server 生成权威结算；SQLite transaction、状态条件和唯一约束保证重复或并发结算只发奖一次。
 
+## 与总蓝图同步：Go 后台与幂等结算闭环
+
+本周要闭合的是“至少一次发送、至多一次产生经济效果”。网络超时后 Server 无法判断 Backend 是否已提交，因此一定会重试；正确性必须来自同一个 `idempotency_key`、数据库唯一约束和单个短事务，而不是假设请求只到达一次。
+
+完整数据流：
+
+```text
+Run 进入 Extracted / Dead / Abandoned
+  -> Dedicated Server 冻结权威结果快照
+  -> 生成一次 SettlementEvent 和稳定 idempotency_key
+  -> POST /v1/matches/{match_id}/settlements
+  -> Backend 校验 Server、Match、Run 与事件终态
+  -> SQLite 短事务写事件、Run 终态、库存流水和可重复响应
+  -> Server 收到确认；超时则使用同一 key 重试
+```
+
+实现前固定不变量：
+
+- 一个 `run_id` 只能从进行中进入一个终态；
+- 同一个 `item_instance_id` 不能同时进入永久仓库和丢失清单；
+- Client 永远不能提供 `extracted_items` 或奖励倍率作为权威输入；
+- 重复 key 返回第一次保存的响应，不能重新计算当下仓库状态；
+- `RunState`、SettlementEvent、库存 Ledger 和奖励必须同事务提交或一起回滚；
+- 响应丢失、Server 重启和并发提交都不得重复发奖。
+
+建议先写数据库级测试，再写 HTTP：同 key 顺序重复、同 key 并发重复、不同 key 竞争同一 run、死亡/撤离竞态、事务中途错误、Commit 成功但响应丢失。随后才接 UE Server 的重试队列和本地 spool。
+
+90 秒重连与结算共享同一个 `run_id`。宽限期内 Pawn 仍可死亡或完成已经开始的世界规则；一旦 Run 进入终态，重连只能恢复结果界面，不能生成新 Pawn 或第二份 Settlement。
+
 ## 前置条件与周门槛
 
 - 第 9 周并发分配和 Ticket 身份链通过。
@@ -45,13 +74,13 @@ Server 为每个 run 保存恢复快照：run_state、Pawn 位置/旋转、Healt
 
 ## 工作单元 2：重连 Ticket 与恢复
 
-重连 Ticket 绑定 player_id、match_id、run_id、server_instance_id、用途=`reconnect`、snapshot_version 和 expiry。Backend 只在 Match 仍 InGame、Run 非终态且宽限期内签发。
+每次重连请求都签发新的 Ticket，绑定 ticket_id、player_id、match_id、run_id、server_instance_id/generation、purpose=`reconnect`、snapshot_version 和 expiry。Backend 只在 Match 仍 InGame、Run 非终态且宽限期内签发；首次 connect Ticket 即使仍未过期也不能用于 reconnect。
 
-Server 校验 Ticket 后按顺序：找到现有 run → 拒绝第二个活跃连接 → 重新绑定 Controller/PlayerState/Pawn → 发送当前完整快照 → Client 应用 UI/表现 → Server 标记 Connected。
+Server 按第 8–9 周同一原子协议处理：验证 reconnect purpose → 找到现有 run → 原子预留 Ticket 和 run 连接槽 → 拒绝第二个活跃连接 → 重新绑定 Controller/PlayerState/Pawn → PostLogin 成功后消费 Ticket → 发送当前完整快照 → Client 应用 UI/表现 → Server 标记 Connected。恢复失败时释放预留但不创建第二个 Pawn。
 
 Client 旧版本不得覆盖 Server 新状态；恢复期间禁止 Fire/Inventory Command，直到收到 `restore_complete(snapshot_version)`。
 
-测试：10 秒重连、89 秒重连、91 秒重连、同 Ticket 双开、重连前 Pawn 死亡、撤离成功后重连、恢复期间发背包命令。
+测试：10 秒重连、89 秒重连、91 秒重连、首次 connect Ticket 冒充 reconnect、同 reconnect Ticket 双开、两个 reconnect Ticket 竞争同一 run、握手失败后重试、重连前 Pawn 死亡、撤离成功后重连、恢复期间发背包命令。
 
 ## 工作单元 3：权威结算与 SQLite 幂等事务
 
@@ -65,22 +94,27 @@ SettlementEvent {
 }
 ```
 
-固定唯一约束：`UNIQUE(run_id, settlement_version)` 与 `UNIQUE(idempotency_key)`。新增 `settlement_events`、`player_rewards`、`inventory_ledger`，并扩展 runs 终态。
+固定唯一约束：`UNIQUE(run_id, settlement_version)`、作用域化的 `UNIQUE(actor_scope, route, idempotency_key)`，以及事件内 `UNIQUE(settlement_event_id, item_instance_id)`。幂等记录保存规范化 `request_hash` 和第一次完整响应。新增 `settlement_events`、`player_rewards`、`inventory_ledger`、权威 `item_instances` 所有权/version，并扩展 runs 终态。
+
+提交前拒绝 extracted/lost 列表内部重复或彼此相交。对每个物品使用条件更新：只有 `owner_kind='run' AND owner_id=当前 run_id AND version=预期值` 才能转移到 stash 或 lost；受影响行数必须等于请求物品数，否则整个事务回滚为 `ItemOwnershipConflict`。Ledger 对 `(item_instance_id, from_version)` 唯一，防止同一所有权版本产生两次经济移动。
 
 一个短 transaction 中：
 
 1. 验证 Server 身份与 Match/Run 关系；
-2. 尝试插入 settlement_event；
-3. 用条件更新 `runs SET status=终态 WHERE status='InProgress'`；
-4. 写 inventory_ledger 和 player_rewards；
-5. 保存可重复返回的响应；
-6. Commit。
+2. 检查作用域化 idempotency key 与 request_hash；
+3. 用条件更新抢占 Run 终态；
+4. 插入 settlement_event；
+5. 条件转移 item_instances，并写 inventory_ledger 和 player_rewards；
+6. 保存可重复返回的响应；
+7. Commit。
 
-遇到唯一冲突，读取原事件/响应并返回 `already_processed=true`；不得再次发奖。死亡和撤离竞争时，只有第一个合法 `InProgress -> Dead/Extracted` 获胜，后到事件记录 conflict 且不覆盖终态。
+冲突分类固定为：同 scope/key 且同 request_hash 返回原响应并标记 `already_processed=true`；同 key 不同 hash 返回 `IdempotencyMismatch`；不同 key 提交已经终态的 run 返回 `RunConflict`。后两者都不能伪装成成功重复。死亡和撤离竞争时，只有第一个合法 `InProgress -> Dead/Extracted` 获胜。
 
 ## 工作单元 4：Server 重试与明确失败状态
 
-Server 结算发送采用至少一次：固定 idempotency_key，指数退避加抖动，最多例如 1/2/4/8/16 秒后进入 PendingRetry；进程关闭前把未确认事件写入本地受控 spool 文件，重启后重放。只有 Backend 返回不可重试的验证错误才进入 FailedManualReview。
+Server 结算发送采用至少一次：生成事件后、第一次 HTTP 发送前，先用“临时文件写完并 Flush -> 原子 rename”持久化 spool；Backend 确认后再删除。spool 保存 payload、request_hash、固定 idempotency_key，以及 Backend 分配时签发、绑定 match/server 且短期有效的 Settlement Replay Token。spool 目录限制为运行账号可读写，禁止写日志或进入版本控制。这样异常 kill 不依赖关闭回调，新进程可在 recovery 模式授权重放旧实例事件；损坏文件隔离到 quarantine 并进入 FailedManualReview，不能静默丢弃。
+
+指数退避加抖动使用例如 1/2/4/8/16 秒，耗尽后保留 PendingRetry。只有 Backend 返回不可重试的验证错误才进入 FailedManualReview。Replay Token 过期时停止自动重放并报警，不能退回使用普通 Client Token 或只信任旧 `server_instance_id`。
 
 区分：HTTP 超时/5xx/SQLite busy 可重试；401/403、schema invalid、Run conflict 不自动重试。响应丢失时保持同一 key，不创建新事件。
 
@@ -98,6 +132,10 @@ Server 结算发送采用至少一次：固定 idempotency_key，指数退避加
 6. Server 在 pending 时退出并重启：spool 重放一次；
 7. 撤离倒计时断线并在 90 秒内/外重连；
 8. Client 伪造 extracted_items：Server/Backend 不接受 Client 权威结算。
+9. 同一 key 改变 result/物品 body：返回 `IdempotencyMismatch`，仓库不变；
+10. 不同 key 竞争同一 run：失败者返回 `RunConflict`，不能得到伪成功；
+11. extracted/lost 重复、相交或物品不属于该 run：整个 transaction 回滚；
+12. 首次发送前强杀 Server：重启后仍能从已经原子落盘的 spool 恢复。
 
 每次实验运行 SQL 查询证明事件、奖励、流水计数和 Run 终态，而不仅看 HTTP 200。
 
@@ -110,6 +148,8 @@ Server 结算发送采用至少一次：固定 idempotency_key，指数退避加
 - [ ] 10 次顺序/并发结算只发奖一次；
 - [ ] Commit 后响应丢失可返回原处理结果；
 - [ ] Dead/Extracted 竞态只有一个终态；
+- [ ] 幂等 key/body 不匹配、RunConflict 和真正重放能被明确区分；
+- [ ] 物品归属/version 条件更新保证 Ledger 与仓库不复制物品；
 - [ ] Backend 不可用时有 PendingRetry/spool/Failed 状态；
 - [ ] Client 无法上传权威奖励。
 

@@ -290,6 +290,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "ExtractionOps",
+			"Enabled": true
+		},
+		{
 			"Name": "ShooterMaps",
 			"Enabled": true
 		},

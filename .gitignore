@@ -9,12 +9,14 @@ Saved/
 # Unreal assets are kept outside this source/config/docs baseline.
 Content/
 **/Content/
+# ExtractionOps owns a small, reviewable set of authored Vertical Slice assets.
+!Plugins/GameFeatures/ExtractionOps/Content/
+!Plugins/GameFeatures/ExtractionOps/Content/**
 *.replay
 Build/EditorPerfStats.csv
 
 # Generated IDE and project files
 .vs/
-.ua/
 .idea/
 .codex/
 .vscode/

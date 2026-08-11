@@ -2,15 +2,60 @@
 
 ## 本周目标
 
-沿一条真实调用链读懂 Lyra，并创建项目自己的 `ExtractionOps` GameFeature Plugin。完成后应能解释 Experience 如何激活 Feature、输入如何到达 Pawn/GAS、服务器状态如何进入 HUD，同时拥有一个可加载、可停用、不会污染 Lyra 核心的最小插件。
+沿一条真实调用链读懂 Lyra，理解并完成项目自己的 `ExtractionOps` GameFeature Plugin。完成后应能解释 Experience 如何激活 Feature、输入如何到达 Pawn/GAS、服务器状态如何进入 HUD，同时拥有一个可加载、可停用、不会污染 Lyra 核心的最小插件。
+
+## 与当前实现同步（不要重复创建）
+
+GameFeature Runtime 底座已经存在于：
+
+```text
+Plugins/GameFeatures/ExtractionOps/
+  ExtractionOps.uplugin
+  Config/Tags/ExtractionOpsTags.ini
+  Content/ExtractionOps.uasset
+  Source/ExtractionOpsRuntime/
+```
+
+当前代码已经提供：
+
+- `UExtractionMatchStateComponent`：注入 `LyraGameState`，复制 Match、Threat、终端数量、有效撤离区和奖励倍率；
+- `UExtractionRunStateComponent`：注入 `LyraPlayerState`，复制 `run_id`、玩家终态和撤离结束服务器时间；
+- `AExtractionSignalTerminal` 与 `AExtractionZone`：终端和撤离区的服务器权威 Actor；
+- `FExtractionStateRules`：Match、Run、Terminal、Zone 的纯状态转换规则；
+- `/ExtractionOps/ExtractionOps`：GameFeatureData，通过 `GameFeatureAction_AddComponents` 注入上述两个组件。
+
+本周应先沿这些文件反向理解实现，再创建专属 Extraction Experience。不要再创建一个平行 Subsystem 保存同一份 Match/Run 状态，否则会产生双事实来源。
+
+### 本周要补的 Extraction Experience
+
+建议资产结构：
+
+```text
+/ExtractionOps/Experiences/B_ExtractionExperience
+/ExtractionOps/Experiences/DA_ExtractionActionSet
+/ExtractionOps/Pawns/DA_ExtractionPawnData
+/ExtractionOps/UI/W_ExtractionHUDLayout
+```
+
+实施顺序：
+
+1. 复制最接近第三人称射击的 Lyra Experience，先记录所有原始引用；
+2. 改名并放入 ExtractionOps，不复制 Character 类、ASC 或动画系统；
+3. 在 Experience/ActionSet 的 GameFeature 列表中加入 `ExtractionOps` 和必需的 `ShooterCore`；
+4. PawnData 第一版继续引用 Lyra 可工作的 Pawn、AbilitySet 和 InputConfig；
+5. HUD 第一版只显示 Experience 已加载、NetMode、MatchState、Threat、RunState；
+6. 用该 Experience 启动 PIE，不再手工调用 MCP 激活 GameFeature；
+7. 验证退出 Experience 后 Feature 能正确停用，不残留组件或委托。
+
+完成信号是“加载 Extraction Experience 自动激活插件并注入组件”，而不是仅在 MCP 中看到插件可手工变为 `Active`。
 
 ## 前置条件与周门槛
 
 - 第 1 周 Editor、Server 和双客户端基线已通过。
-- `<RepoRoot>` 当前为 `D:\Document\AI\Codex\extraction-ops`；本周新增路径是 `<RepoRoot>\Plugins\ExtractionOps`。
+- `<RepoRoot>` 当前为 `D:\Document\AI\Codex\extraction-ops`；本周插件路径是 `<RepoRoot>\Plugins\GameFeatures\ExtractionOps`。
 - 开始前保存 `git status --short` 和可玩基线录屏；出现回归时必须能回到此基线。
 
-第 1 周网络基线未通过时，不创建插件。
+第 1 周网络基线未通过时，可以阅读已有插件和运行 Editor 测试，但不把 Experience 的独立 Server 验收标为完成。
 
 ## 本周时间预算（15–20 小时）
 
@@ -18,7 +63,7 @@
 | --- | --- | ---: |
 | 1 | 按调用链阅读 Lyra 并建立索引 | 4 小时 |
 | 2 | 创建并编译 GameFeature Plugin | 3–4 小时 |
-| 3 | 建立 Experience 激活与最小 Subsystem | 3–4 小时 |
+| 3 | 理解现有权威组件并建立 Experience 激活 | 3–4 小时 |
 | 4 | 添加网络角色调试 HUD | 3–4 小时 |
 | 5 | 双客户端验证、架构图和阅读笔记 | 2–4 小时 |
 
@@ -68,28 +113,24 @@ GameInstance
 
 通过标准：能从 Experience 资产沿代码和 GameFeature Action 解释 Pawn、Ability、输入和 HUD 是如何装配的。
 
-## 工作单元 2：创建 ExtractionOps GameFeature Plugin
+## 工作单元 2：复核 ExtractionOps GameFeature Plugin
 
-### 2.1 在 Editor 创建插件
+### 2.1 理解创建步骤
 
-1. 打开 `Edit > Plugins`；
-2. 选择 `Add/新建插件`；
-3. 选择 `Game Feature (C++)` 模板；
-4. 名称填写 `ExtractionOps`；
-5. 保持 Runtime 类型，创建后关闭 Editor。
+当前插件已经创建。通过 `.uplugin`、Build.cs 和模块入口反向理解标准步骤；只有在全新练习分支中才使用 Editor 的 `Game Feature (C++)` 模板重做，当前工作区不要创建同名插件。
 
 计划新增结构：
 
 ```text
-Plugins/ExtractionOps/
+Plugins/GameFeatures/ExtractionOps/
   ExtractionOps.uplugin
   Config/
   Content/
     Experiences/
     Input/
     UI/
-  Source/ExtractionOps/
-    ExtractionOps.Build.cs
+  Source/ExtractionOpsRuntime/
+    ExtractionOpsRuntime.Build.cs
     Public/
     Private/
 ```
@@ -98,7 +139,7 @@ Plugins/ExtractionOps/
 
 ### 2.2 设置最小依赖
 
-`ExtractionOps.Build.cs` 只加入当前最小 Feature 所需模块：`Core`、`CoreUObject`、`Engine`、`GameplayTags`、`GameFeatures`、`ModularGameplay`，以及调用 Lyra 公共类型时需要的 `LyraGame`。不要提前加入 HTTP、SQLite、OnlineServices 或 Editor 模块。
+`ExtractionOpsRuntime.Build.cs` 当前只包含玩法底座所需模块。新增依赖前先确认实际 include/API 需要它；不要提前加入 HTTP、SQLite、OnlineServices 或 Editor 模块。
 
 重新生成项目文件并构建 `LyraEditor Win64 Development`。成功信号：插件模块编译并在 Plugins 面板中显示，没有循环依赖。
 
@@ -106,30 +147,23 @@ Plugins/ExtractionOps/
 
 在 Game Features 面板找到插件，分别执行 Load/Activate 与 Deactivate。验证停用后不会破坏 Lyra 默认 Experience。
 
-## 工作单元 3：最小 Subsystem 与 Experience 激活
+## 工作单元 3：现有权威组件与 Experience 激活
 
-### 3.1 创建 Subsystem
+### 3.1 理解现有权威组件
 
-在插件中新增 `UExtractionGameInstanceSubsystem`：
-
-- 继承 `UGameInstanceSubsystem`；
-- `Initialize`/`Deinitialize` 只记录结构化日志；
-- 暂存当前本地项目阶段和后续 Backend Service 入口；
-- 不保存生命、伤害、库存或服务器战局规则。
-
-日志至少包括 `event=extraction_subsystem_initialized` 和当前 NetMode。关闭 PIE 时应看到 deinitialize 日志。
+当前不创建重复 Subsystem。分别阅读 MatchStateComponent、RunStateComponent 及 GameFeatureData 的组件注入配置，记录每个字段由谁写入、复制给谁、UI 如何订阅 `OnSnapshotChanged`。如果未来确实需要跨 World 的非战局服务，再单独论证 GameInstanceSubsystem；本局实时状态不得搬入它。
 
 ### 3.2 创建 Extraction Experience
 
 在插件 Content 中复制最接近的 ShooterCore Experience 或创建引用它的组合资产，命名 `B_ExtractionExperience`。复用现有 PawnData、输入和武器，不复制整套 Lyra 资产。
 
-创建对应 GameFeatureData，并添加最小 Action：
+复用现有 `/ExtractionOps/ExtractionOps` GameFeatureData，不再创建第二个同名事实来源。按需要增加最小 Action：
 
 - 激活插件；
 - 使用 `GameFeatureAction_AddWidget` 注入调试 UI；
 - 后续周再增加 Ability/Input Action。
 
-在测试地图 World Settings 或启动参数中选择 `B_ExtractionExperience`。成功信号：Experience 加载完成，Subsystem 日志出现，原 Shooter 行为仍可用。
+在测试地图 World Settings 或启动参数中选择 `B_ExtractionExperience`。成功信号：Experience 加载完成，MatchState/RunState 组件出现，原 Shooter 行为仍可用。
 
 ## 工作单元 4：网络角色调试 HUD
 
@@ -184,8 +218,8 @@ Plugins/ExtractionOps/
 
 - [ ] 能解释 GameMode、GameState、PlayerState、Controller 和 Pawn 边界；
 - [ ] 能指出至少三个现有 GameFeature 的数据资产和加载入口；
-- [ ] `Plugins/ExtractionOps` 是可编译的 GameFeature Plugin；
-- [ ] `UExtractionGameInstanceSubsystem` 正确初始化和释放；
+- [ ] `Plugins/GameFeatures/ExtractionOps` 是可编译的 GameFeature Plugin；
+- [ ] MatchState/RunState 通过 GameFeature Action 正确注入和释放；
 - [ ] `B_ExtractionExperience` 能激活 Feature；
 - [ ] 调试 HUD 正确显示网络角色且不会在 Server 创建；
 - [ ] Lyra 默认玩法没有回归。

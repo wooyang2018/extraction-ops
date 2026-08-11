@@ -4,6 +4,27 @@
 
 把“能演示”提升为可重复、可测量、可定位：建立 Go 单元/集成测试、UE 功能测试、多人冒烟与故障矩阵；统一跨 Client/Server/Backend 日志；用 Unreal Insights 和网络分析完成一次有证据的优化。
 
+## 与当前实现同步：从 4 个规则测试扩展证据链
+
+当前已有并通过的 Editor Automation 测试是：
+
+```text
+ExtractionOps.StateRules.Match
+ExtractionOps.StateRules.Run
+ExtractionOps.StateRules.Threat
+ExtractionOps.StateRules.Zone
+```
+
+这些只证明纯状态规则，不证明 Actor 重叠、复制、GAS、物品事务或后台一致性。后续按层增加：
+
+1. **纯规则**：状态转换、Threat 映射、奖励倍率、背包变换、结算判定；
+2. **UE World/功能测试**：终端计时、唯一激活、撤离进入/取消/完成、死亡取消、AI 波次去重；
+3. **双客户端自动化**：一个 Server、两个 Client 下的射击、拾取、终端、撤离和最终复制；
+4. **Go 集成测试**：真实 migration + 临时 SQLite，覆盖房间容量、Ticket、分配和结算事务；
+5. **端到端故障测试**：100 ms/5% 丢包、Backend 超时、响应丢失、Server 退出和 90 秒重连。
+
+所有测试用例必须指向一个产品不变量，例如“同一 TerminalId 只提升一次 Threat”或“同一 run_id 只产生一次经济效果”。不要仅以代码类名组织测试而忘记玩家结果。
+
 ## 前置条件与周门槛
 
 - 第 10 周不存在重复奖励、重复 Pawn 或可覆盖终态的问题。
@@ -72,7 +93,7 @@ match_id run_id server_instance_id error_code duration_ms
 
 ## 工作单元 4：性能与网络基线
 
-固定测试环境：Development/Shipping 构建类型、硬件、1280×720 固定画质、`L_ExtractionTest`、60 秒、2 人/4 人/4 人+20 AI 或 100 个可复制 Pickup、RTT/丢包值。
+固定测试环境：Development/Shipping 构建类型、硬件、最终目标使用 1080p 固定画质、`L_ExtractionTest`、60 秒、单人/双人/双人+20 AI 或 100 个可复制 Pickup、RTT/丢包值。
 
 每组记录：Client FPS/Game/Render/GPU、Server frame/tick、内存、发送/接收带宽、复制 Actor/RPC、Backend API p50/p95/p99、Settlement 成功/重试。
 
@@ -93,7 +114,7 @@ match_id run_id server_instance_id error_code duration_ms
 - [ ] 两客户端端到端冒烟可重复；
 - [ ] 故障矩阵覆盖网络、Backend、Server、重复请求和重连；
 - [ ] 日志可用稳定 ID 跨三个进程关联；
-- [ ] 2 人、4 人和压力场景有固定基线；
+- [ ] 单人、双人和压力场景有固定基线；
 - [ ] 有 Insights 与网络分析报告；
 - [ ] 一次优化使用相同条件给出前后数据；
 - [ ] 优化后正确性测试全部通过。

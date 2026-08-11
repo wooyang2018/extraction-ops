@@ -281,6 +281,19 @@ Get-ChildItem (Join-Path $SourceTestRoot 'Binaries\Win64') | Where-Object Name -
 
 成功标准：出现源码版生成的 LyraClient.exe、LyraServer.exe 和项目 Editor 模块，不再出现 Launcher installed distribution 不支持 Client/Server 的提示。
 
+### Build 与 Cook 的目录对应关系
+
+Build 和 Cook 不是通过共享某个产物目录来对应，而是都使用同一个项目文件作为目录锚点：
+
+~~~text
+同一个 LyraStarterGame.uproject
+        │
+        ├── Build → Binaries\Win64
+        └── Cook  → Saved\Cooked\WindowsClient/WindowsServer
+~~~
+
+因此，Build 命令的 `-Project`、Cook 时打开的 `.uproject` 以及后续启动验证，都必须指向同一个测试 worktree。`Build.bat` 可以来自 `SourceUE_ROOT`，但项目产物仍会写入 `SourceTestRoot` 下的 `Binaries`；Cook 也会把客户端和服务器资源写入该项目的 `Saved\Cooked` 子目录。
+
 ## 11. 阶段 8：Cook Client 与 Server
 
 使用源码版 Editor 打开测试 worktree：

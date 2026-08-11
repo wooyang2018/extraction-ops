@@ -4,11 +4,41 @@
 
 在第 3–4 周可用网络战斗链上，沿用 `ULyraAbilitySystemComponent`、HealthSet、CombatSet 和武器 Ability，增加 ExtractionOps 自己的 Gameplay Tags、一个专属 AttributeSet，以及可预测/可阻断的战斗能力。重点是掌握 Ability、Attribute、Effect、Cue 和普通组件的边界。
 
+## 与总蓝图同步：GAS 交互能力接线
+
+当前 `AExtractionSignalTerminal` 已实现服务器计时和 Threat 更新，但还没有从玩家输入接入。不要给终端添加“任何客户端都能调用”的 Server RPC：场景 Actor 通常不归该客户端所有，RPC Ownership 不成立。
+
+正确链路是：
+
+```text
+Enhanced Input: Interact
+  -> Lyra InputTag.Ability.Interact
+  -> 玩家 ASC 上的 Interaction Ability
+  -> 本地扫描并显示 InteractionOption
+  -> Server Ability 校验目标、距离、视线、RunState
+  -> Server 调用 AExtractionSignalTerminal::BeginActivation
+  -> Terminal Server Timer
+  -> UExtractionMatchStateComponent::ActivateTerminal
+  -> Snapshot 复制到 HUD 与 AI Director
+```
+
+实施步骤：
+
+1. 先读 Lyra `IInteractableTarget`、`FInteractionOption`、Interact Ability 和扫描 AbilityTask；
+2. 让终端实现或组合 Lyra 可交互目标接口，暴露文本、持续时间和 Ability；
+3. Interaction Ability 只提交目标/选项，服务器重新检查距离、视线、终端状态以及玩家非 Dead/Extracting；
+4. 合法时才调用 `BeginActivation`；松开按键、离开范围、死亡或目标失效时取消；
+5. 完成后由现有 MatchState 更新 Threat，Ability 不直接修改终端计数；
+6. 用 Gameplay Tag 处理射击、换弹、治疗和交互的互斥；
+7. 为 `OutOfRange`、`BlockedByState`、`AlreadyActivated`、`TargetInvalid` 建立明确失败表现。
+
+至少测试：两人同时启动同一终端、激活中离开、激活中死亡、重复激活、100 ms/5% 丢包，以及恶意客户端绕过扫描直接提交目标。最终只允许服务器产生一次终端激活。
+
 ## 前置条件与周门槛
 
 - 两客户端在延迟/丢包下的生命、死亡和弹药能收敛。
 - 不创建第二个 ASC；继续使用 Lyra PlayerState/Pawn 初始化链。
-- 新 C++ 位于 `Plugins/ExtractionOps/Source/ExtractionOps`，新资产位于插件 Content。
+- 新 C++ 位于 `Plugins/GameFeatures/ExtractionOps/Source/ExtractionOpsRuntime`，新资产位于插件 Content。
 
 ## 本周时间预算（15–20 小时）
 
@@ -17,7 +47,7 @@
 | 1 | 阅读和调试现有 GAS 链 | 3 小时 |
 | 2 | 标签规范与专属 AttributeSet | 4 小时 |
 | 3 | Gameplay Effect 与伤害/护甲规则 | 3–4 小时 |
-| 4 | Fire/Reload 扩展、预测和 Cue | 4–5 小时 |
+| 4 | Fire/Reload/Interact、预测和 Cue | 4–5 小时 |
 | 5 | 双客户端测试与设计说明 | 2–4 小时 |
 
 ## 先读什么
@@ -61,13 +91,15 @@ Damage.Environment
 
 ### 2.2 创建 `UExtractionArmorSet`
 
-计划新增 `AbilitySystem/Attributes/ExtractionArmorSet.h/.cpp`，包含：
+`UExtractionArmorSet` 是总蓝图确认的必做项，不再作为可选技术展示。计划新增 `AbilitySystem/Attributes/ExtractionArmorSet.h/.cpp`，包含：
 
 - `Armor`：当前护甲；
 - `MaxArmor`：上限；
 - 属性访问器与复制回调；
 - Server 权威修改和 Owner/相关观察者需要的复制策略；
 - Clamp：`0 <= Armor <= MaxArmor`。
+
+MVP 数值和边界固定为：出生时 `Armor=MaxArmor=30`；Bullet Damage 先扣 Armor、溢出值再扣 Health；Medkit 只恢复 Health。v1 不增加护甲拾取、修甲 Ability、自动回复、护甲品质或身体部位系统，避免必做 ArmorSet 扩张成新的装备系统。
 
 把 ArmorSet 加入 Extraction Pawn 使用的 AbilitySet，而不是在 Character 构造函数中硬编码第二套 ASC。
 
@@ -83,11 +115,13 @@ Damage.Environment
 
 环境伤害与 Bullet 使用不同 Damage Tag，但共用权威属性修改链。
 
-## 工作单元 4：Ability、预测和 Gameplay Cue
+## 工作单元 4：战斗/交互 Ability、预测和 Gameplay Cue
 
 ### 4.1 Fire/Reload 扩展
 
 复用 Lyra Ranged Weapon Ability；只在需要项目标签、护甲或失败原因时建立 Extraction 派生类/配置。Reload Ability 必须检查：武器存在、未满弹、有备用弹、非 Dead、非已 Reloading；激活时授予 `State.Reloading`，结束/取消/死亡时必定移除。
+
+同一工作单元完成本页“GAS 交互能力接线”，确保 Interact Ability 经服务器校验后调用终端，而不是让终端接收无 Ownership 的客户端 RPC。
 
 ### 4.2 预测边界
 

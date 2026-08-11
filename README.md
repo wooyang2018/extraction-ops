@@ -4,7 +4,9 @@
 
 ## 项目定位
 
-项目围绕“登录 → 大厅 → 会话 → 角色与武器 → 搜刮 → 背包 → 撤离/淘汰 → 服务端结算 → Go 后端持久化 → 返回大厅”这条可运行、可解释、可演示的闭环展开。
+项目定位为第三人称、1–2 人合作 PvE、12–15 分钟短局的撤离射击 Vertical Slice。核心选择是：启动信号终端可获得物资与撤离情报，但会同步提高 Threat Level；玩家必须不断判断“继续扫描，还是带着现有收益立即撤离”。
+
+实现顺序先证明枪感、AI 压迫、信息博弈和 Dedicated Server 权威闭环，再接入 Go 后台。完整范围、20 周阶段门槛和最终验收见 [`docs/vertical-slice-blueprint.md`](docs/vertical-slice-blueprint.md)。
 
 技术重点包括：
 
@@ -16,7 +18,7 @@
 ## 目录
 
 - `docs/`：学习路线、技术设计、验收标准与面试材料
-- `Plugins/ExtractionOps/`：项目新增功能的主要落点
+- `Plugins/GameFeatures/ExtractionOps/`：项目新增玩法、复制状态与本地资产的主要落点
 - `Source/`、`Config/`：Unreal 项目代码与配置
 - `Build/`：构建和自动化脚本
 - `Scripts/`：本地资源初始化和工程准备脚本
@@ -37,8 +39,8 @@
 
 脚本会将 Lyra 资源复制到当前工作区，并保留在 `.gitignore` 排除范围内。脚本支持 UnrealVersionSelector、GenerateProjectFiles.bat 以及新版 UE 自带的 UnrealBuildTool。完整说明见 [`docs/asset-bootstrap.md`](docs/asset-bootstrap.md)。
 
-当前仓库基线只纳入源码、配置、构建脚本和文档。`Content/` 资产以及 `Binaries/`、`Intermediate/`、`Saved/`、`DerivedDataCache/` 等生成内容保留在本地，后续如需分发再单独规划资源仓库或 Git LFS。
+Lyra 原始 `Content/` 仍保留在本地；仅 `Plugins/GameFeatures/ExtractionOps/Content/` 中少量自研 Slice 资产纳入版本控制。`Binaries/`、`Intermediate/`、`Saved/` 和 `DerivedDataCache/` 等生成内容继续忽略。
 
 ## 计划与文档
 
-详细路线见 [`docs/00-roadmap.md`](docs/00-roadmap.md)，项目总览见 [`docs/README.md`](docs/README.md)。
+完整路线、项目总览和统一工作规则见 [`docs/README.md`](docs/README.md)。
