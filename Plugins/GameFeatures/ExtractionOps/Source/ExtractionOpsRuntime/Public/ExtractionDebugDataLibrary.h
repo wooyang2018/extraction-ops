@@ -51,6 +51,18 @@ struct EXTRACTIONOPSRUNTIME_API FExtractionNetworkDebugSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category="Extraction Ops|Debug")
 	EExtractionRunState RunState = EExtractionRunState::InRaid;
+
+	UPROPERTY(BlueprintReadOnly, Category="Extraction Ops|Debug")
+	float Health = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="Extraction Ops|Debug")
+	float MaxHealth = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="Extraction Ops|Debug")
+	float Armor = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="Extraction Ops|Debug")
+	float MaxArmor = 0.0f;
 };
 
 /** Keeps debug UI read-only and independent from the authoritative gameplay components. */

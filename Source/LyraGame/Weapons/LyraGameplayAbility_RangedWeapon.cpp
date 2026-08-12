@@ -492,7 +492,9 @@ void ULyraGameplayAbility_RangedWeapon::OnTargetDataReadyCallback(const FGamepla
 			MyAbilityComponent->CallServerSetReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey(), LocalTargetDataHandle, ApplicationTag, MyAbilityComponent->ScopedPredictionKey);
 		}
 
-		const bool bIsTargetDataValid = true;
+		FString TargetDataFailureReason;
+		const bool bIsTargetDataValid = !CurrentActorInfo->IsNetAuthority()
+			|| ValidateTargetDataOnServer(LocalTargetDataHandle, ApplicationTag, TargetDataFailureReason);
 
 		bool bProjectileWeapon = false;
 
@@ -540,13 +542,24 @@ void ULyraGameplayAbility_RangedWeapon::OnTargetDataReadyCallback(const FGamepla
 		}
 		else
 		{
-			UE_LOG(LogLyraAbilitySystem, Warning, TEXT("Weapon ability %s failed to commit (bIsTargetDataValid=%d)"), *GetPathName(), bIsTargetDataValid ? 1 : 0);
+			UE_LOG(LogLyraAbilitySystem, Warning,
+				TEXT("Weapon ability %s failed to commit (bIsTargetDataValid=%d reason=%s)"),
+				*GetPathName(), bIsTargetDataValid ? 1 : 0,
+				TargetDataFailureReason.IsEmpty() ? TEXT("commit_failed") : *TargetDataFailureReason);
 			K2_EndAbility();
 		}
 	}
 
 	// We've processed the data
 	MyAbilityComponent->ConsumeClientReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey());
+}
+
+bool ULyraGameplayAbility_RangedWeapon::ValidateTargetDataOnServer(
+	const FGameplayAbilityTargetDataHandle& TargetData,
+	FGameplayTag ApplicationTag,
+	FString& OutFailureReason)
+{
+	return true;
 }
 
 void ULyraGameplayAbility_RangedWeapon::StartRangedWeaponTargeting()
@@ -593,4 +606,3 @@ void ULyraGameplayAbility_RangedWeapon::StartRangedWeaponTargeting()
 	// Process the target data immediately
 	OnTargetDataReadyCallback(TargetData, FGameplayTag());
 }
-

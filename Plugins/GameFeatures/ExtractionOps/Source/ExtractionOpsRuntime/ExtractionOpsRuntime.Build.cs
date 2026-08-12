@@ -20,10 +20,13 @@ public class ExtractionOpsRuntime : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"AIModule",
 				"GameplayAbilities",
+				"GameplayTasks",
 				"GameplayTags",
 				"GameplayMessageRuntime",
 				"LyraGame",
+				"NavigationSystem",
 				"NetCore",
 				"UMG"
 			});

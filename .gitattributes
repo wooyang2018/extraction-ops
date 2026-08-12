@@ -1,5 +1,7 @@
-# The GitHub repository does not provide Git LFS, so the small vertical-slice
-# assets in this repository are stored as ordinary Git binary files.
-*.umap filter=lfs diff=lfs merge=lfs -text
-*.ubulk filter=lfs diff=lfs merge=lfs -text
-*.pak filter=lfs diff=lfs merge=lfs -text
+# This GitHub repository does not provide Git LFS.
+# Keep Unreal binary assets in ordinary Git and enforce the 100 MiB GitHub
+# per-file limit through review and pre-push checks.
+*.uasset -text
+*.umap -text
+*.ubulk -text
+*.pak -text

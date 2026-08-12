@@ -1,8 +1,12 @@
 # 第 6 周：物品、背包与客户端状态
 
+## 实现状态（2026-08-12）
+
+12 格 Owner-only raid ledger、稳定实例 ID、版本化命令、世界拾取/容器、Medkit、八种 Valuable、事件驱动 UI 和 `I` 键显隐已完成。武器装备与切换明确复用 Lyra Inventory/Equipment/QuickBar，不在 raid ledger 维护第二份装备状态。证据见 [Week 04–07 验收记录](evidence/week-04-07-acceptance.md)。
+
 ## 本周目标
 
-基于 Lyra Inventory/Equipment 实现服务器权威的简单槽位背包：稳定物品定义、唯一实例、拾取、移动、堆叠、拆分、装备、使用、丢弃和 UI。对局外永久仓库仍留给第 8–10 周 Backend。
+在 Lyra Inventory/Equipment 旁实现服务器权威的本局战利品槽位背包：稳定物品定义、唯一实例、拾取、移动、堆叠、拆分、使用、丢弃和 UI。两把武器的装备/切换继续由 Lyra QuickBar 唯一负责；对局外永久仓库仍留给第 8–10 周 Backend。
 
 ## 执行基线
 
@@ -121,14 +125,13 @@ Server 按顺序校验：玩家/Pawn 有效 → 非 Dead → 距离在阈值内 
 ```text
 MoveItem(source_slot, target_slot, expected_version)
 SplitStack(item_instance_id, quantity, target_slot, expected_version)
-EquipItem(item_instance_id, expected_version)
 UseItem(item_instance_id, expected_version)
 DropItem(item_instance_id, quantity, expected_version)
 ```
 
 每个请求经过拥有客户端 → Server 权威入口，验证 Ownership、槽位、数量、Definition 能力、当前状态和 `expected_version`。成功完成一次事务性内存变换后 `inventory_version += 1`；失败不修改状态，并返回错误码和当前版本。
 
-实现顺序：Add/Pickup → Move/Swap → Merge → Split → Equip/Unequip → Medkit Use → Drop。每完成一个命令先写最小测试，再进入下一个。
+实现顺序：Add/Pickup → Move/Swap → Merge → Split → Medkit Use → Drop。武器 Equip/Unequip 通过 Lyra QuickBar `SetActiveSlotIndex`，不把 raid item GUID 转换成第二套装备实例。每完成一个命令先写最小测试，再进入下一个。
 
 复制策略：Owner 收到完整槽位和数量；其他客户端只收到外观所需的装备/地面 Pickup，不复制别人的完整背包。旧版本响应不得覆盖新版本状态。
 
@@ -163,7 +166,7 @@ DropItem(item_instance_id, quantity, expected_version)
 
 - [ ] Rifle、Ammo、Medkit 使用稳定 Definition；
 - [ ] 每个 ItemInstance 有 Server 生成的唯一 ID；
-- [ ] 支持拾取、移动、堆叠、拆分、装备、使用和丢弃；
+- [x] raid ledger 支持拾取、移动、堆叠、拆分、使用和丢弃；武器装备/切换复用 Lyra QuickBar；
 - [ ] 16 槽容量限制生效；
 - [ ] 命令统一带 expected_version 并返回确定错误码；
 - [ ] 双人争抢只产生一个胜者；

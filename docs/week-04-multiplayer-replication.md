@@ -1,5 +1,9 @@
 # 第 4 周：多人联机与复制验证
 
+## 实现状态（2026-08-12）
+
+服务器 TargetData 校验已真实接入 Rifle/Shotgun Fire Ability，Baseline、100 ms、100 ms + 5% 丢包三组 Editor Dedicated Process 双客户端会话均通过。规则自动化与日志证据见 [Week 04–07 验收记录](evidence/week-04-07-acceptance.md)。逐发射击与主观延迟表现仍需真人操作录制，不能由无界面 Join smoke 代替。
+
 ## 本周目标
 
 把第 3 周战斗回路放进 Editor Dedicated Process + 两个 Editor Client Process，明确每个动作的发起者、执行者和观察者。伤害、死亡和弹药结果由服务器确认；客户端本地篡改不能改变最终状态。

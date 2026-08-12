@@ -24,6 +24,13 @@ param(
     [ValidateRange(0, 600)]
     [int]$AutomatedSmokeSeconds = 0,
 
+    [ValidateSet('Baseline', 'Lag100', 'Lag100Loss5')]
+    [string]$NetworkProfile = 'Baseline',
+
+    [string]$LogSubdirectory = 'Week01',
+
+    [string[]]$RequiredServerLogPatterns = @(),
+
     [switch]$ValidateOnly
 )
 
@@ -159,7 +166,7 @@ if (-not $engineAssociation) {
 
 $resolvedEngineRoot = Resolve-EngineRoot -RequestedRoot $EngineRoot -EngineAssociation $engineAssociation
 $editorExe = Join-Path $resolvedEngineRoot 'Engine\Binaries\Win64\UnrealEditor.exe'
-$logRoot = Join-Path $repoRoot 'Saved\Logs\Week01'
+$logRoot = Join-Path $repoRoot "Saved\Logs\$LogSubdirectory"
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $serverLog = Join-Path $logRoot "Multiplayer-Server-$timestamp.log"
 $client1Log = Join-Path $logRoot "Multiplayer-Client1-$timestamp.log"
@@ -167,6 +174,11 @@ $client2Log = Join-Path $logRoot "Multiplayer-Client2-$timestamp.log"
 $mapUrl = "${Map}?NumBots=$NumBots"
 if ($Experience) {
     $mapUrl += "?Experience=$Experience"
+}
+$networkExecCommands = switch ($NetworkProfile) {
+    'Lag100' { 'NetEmulation.PktLag 100' }
+    'Lag100Loss5' { 'NetEmulation.PktLag 100,NetEmulation.PktLoss 5' }
+    default { '' }
 }
 
 Write-Host 'Week 01: Dedicated Server plus two visible clients' -ForegroundColor Cyan
@@ -205,6 +217,9 @@ try {
         '-NullRHI',
         "-AbsLog=`"$serverLog`""
     )
+    if ($networkExecCommands) {
+        $serverArguments += "-ExecCmds=`"$networkExecCommands`""
+    }
 
     Write-Host 'Starting the hidden Dedicated Server...' -ForegroundColor Yellow
     $serverProcess = Start-Process `
@@ -264,6 +279,9 @@ try {
         if ($AutomatedSmokeSeconds -gt 0) {
             $clientArguments += @('-unattended', '-NullRHI', '-NoSound')
         }
+        if ($networkExecCommands) {
+            $clientArguments += "-ExecCmds=`"$networkExecCommands`""
+        }
 
         $clientProcess = Start-Process `
             -FilePath $editorExe `
@@ -316,6 +334,16 @@ try {
                 -TimeoutSeconds $ReadyTimeoutSeconds `
                 -Process $serverProcess)) {
             throw 'The Server did not grant the Extraction default loadout.'
+        }
+
+        foreach ($requiredPattern in $RequiredServerLogPatterns) {
+            if (-not (Wait-ForLogPattern `
+                    -LogFile $serverLog `
+                    -Pattern $requiredPattern `
+                    -TimeoutSeconds $ReadyTimeoutSeconds `
+                    -Process $serverProcess)) {
+                throw "The Server log did not contain required pattern: $requiredPattern"
+            }
         }
 
         Write-Host "Holding the two-client session for $AutomatedSmokeSeconds seconds..." -ForegroundColor Yellow

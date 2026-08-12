@@ -1,5 +1,9 @@
 # 第 5 周：GAS 战斗能力与数据驱动
 
+## 实现状态（2026-08-12）
+
+ArmorSet 30/30、Armor→Health Damage Execution、统一 Server 交互 Ability 与终端二次校验已完成；两把武器 Damage Effect 已由 MCP 配置并保存，自动化覆盖伤害拆分。实现和限制见 [Week 04–07 验收记录](evidence/week-04-07-acceptance.md)。
+
 ## 本周目标
 
 在第 3–4 周可用网络战斗链上，沿用 `ULyraAbilitySystemComponent`、HealthSet、CombatSet 和武器 Ability，增加 ExtractionOps 自己的 Gameplay Tags、一个专属 AttributeSet，以及可预测/可阻断的战斗能力。重点是掌握 Ability、Attribute、Effect、Cue 和普通组件的边界。

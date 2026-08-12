@@ -1,5 +1,9 @@
 # 第 7 周：地图交互、搜刮与撤离循环
 
+## 实现状态（2026-08-12）
+
+地图合同资产、运行时 World Partition 兜底、随机有效撤离区、15 分钟 Server 截止时间、三档 Threat 波次、三类 AI Controller/BT、Flanker EQS、死亡容器、Abandoned 和结果快照已完成。无界面多人会话已验证 Raid 激活与断线收敛；完整玩家操作链与“继续扫描还是撤离”的乐趣门槛仍需真人测试。详见 [Week 04–07 验收记录](evidence/week-04-07-acceptance.md)。
+
 ## 本周目标
 
 把战斗和背包串成一局完整 Vertical Slice：进入测试地图、搜刮地面物品/容器、战斗、撤离或死亡、查看本局结果。交互、倒计时、掉落和结果全部由 Dedicated Server 决定。
@@ -10,7 +14,7 @@
 
 ## 与当前实现同步：灰盒、终端、撤离和 Threat AI
 
-已经存在的代码不要重写：`UExtractionMatchStateComponent`、`UExtractionRunStateComponent`、`AExtractionSignalTerminal`、`AExtractionZone` 以及对应 Blueprint。当前缺少的是把它们放入专属 Experience/地图，并接入交互、AI、HUD 和结果流程。
+实现保留并扩展了 `UExtractionMatchStateComponent`、`UExtractionRunStateComponent`、`AExtractionSignalTerminal`、`AExtractionZone` 及对应 Blueprint；Experience、地图、交互、AI、HUD 和结果流程已经接线。后续修改必须沿用这些权威入口，不得在 Level Blueprint 创建平行状态。
 
 ### 灰盒地图合同
 

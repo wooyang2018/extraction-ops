@@ -57,6 +57,9 @@ struct EXTRACTIONOPSRUNTIME_API FExtractionMatchSnapshot
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly)
+	FString MatchId;
+
+	UPROPERTY(BlueprintReadOnly)
 	EExtractionMatchState MatchState = EExtractionMatchState::Loading;
 
 	UPROPERTY(BlueprintReadOnly)
@@ -67,6 +70,10 @@ struct EXTRACTIONOPSRUNTIME_API FExtractionMatchSnapshot
 
 	UPROPERTY(BlueprintReadOnly)
 	FName ActiveExtractionZoneId;
+
+	/** Replicated server clock deadline; clients only smooth the presentation. */
+	UPROPERTY(BlueprintReadOnly)
+	double RaidEndServerTime = 0.0;
 
 	UPROPERTY(BlueprintReadOnly)
 	float RewardMultiplier = 1.0f;

@@ -51,10 +51,41 @@
 - 可重复 MCP 请求位于 `Scripts/Mcp/`；调用入口为 `Scripts/Invoke-UnrealMcp.ps1`。
 - 详细证据见 [Week 01–03 验收记录](evidence/week-01-03-acceptance.md)。
 
+## Week 04–05：网络权威与 GAS
+
+- Rifle/Shotgun Fire Ability 已进入项目服务器 TargetData 校验路径；Lyra 基线只增加一个默认放行的 virtual hook 和跨模块导出标记，具体规则位于 ExtractionOpsRuntime。
+- 校验覆盖来源、状态、弹丸数、起点、方向、射程和重复 Cartridge；Lyra `CommitAbility` 继续权威处理弹药/冷却。
+- `UExtractionArmorSet` 为 30/30，`UExtractionDamageExecution` 先 Armor 后 Health；两把武器 Damage Effect 已重接。
+- 终端、Pickup 和 Loot Container 共用 `UExtractionGameplayAbility_InteractTarget`，由 Server 二次校验并提交。
+
+## Week 06：战利品背包
+
+- PlayerState 注入 Owner-only 12 格 raid ledger；稳定 GUID、版本号和 request ID 贯穿拾取、移动、堆叠、拆分、使用、丢弃与死亡转移。
+- 两类弹药、一个 Medkit、八种三档 Valuable 已保存；满血、死亡或非 InRaid 使用不会消耗 Medkit。
+- `I -> InputTag.Ability.Inventory` 唯一映射和本地 Toggle Ability 已接线；Widget 事件驱动显隐，打开时阻断项目 Fire Ability。
+- 两把主武器装备仍由 Lyra Inventory/Equipment/QuickBar 唯一管理，不在 raid ledger 复制平行装备状态。
+
+## Week 07：Raid、AI 与结果
+
+- `L_ExtractionTest` 的 Editor 资产为 3 终端、2 撤离区、4 普通物资区、1 高风险地标。
+- 无本地玩家的 Editor Dedicated Process 启动早期未流送 World Partition 外部 Actor；Threat Director 会先枚举世界并仅在零实例时生成同一运行时合同，避免 Raid 因无 Zone 无法启动。
+- Match 复制唯一 ID、随机撤离区和 15 分钟 Server 截止时间；超时/断线进入 Abandoned。
+- Low/High/Critical 波次有一次性 fence、全局上限和最小导航距离；Patrol/Flanker/Elite 使用三个项目 Controller/BT，Flanker 使用项目 EQS。
+- 死亡物品只转入一个死亡容器，结果快照 Owner-only 复制。
+
+## Week 04–07 自动化、资产与多人验收
+
+- 最终 `LyraEditor Win64 Development` 冷态构建成功。
+- `Saved/Logs/Week04-07-FinalAutomation.log` 中 9 项 `ExtractionOps.*` 测试全部成功。
+- MCP 检查 24 个必需资产、6 个 GameFeature 组件、两个 Fire 父类和 Flanker EQS；无 dirty package。
+- Baseline、100 ms、100 ms + 5% loss 三组 Editor Dedicated Process + 两客户端 E2E 全部通过。
+- 项目已注册并保存 `ExtractionOpsAssetAuthoring`、`ExtractionOpsAuthorityWorkflow`、`ExtractionOpsValidationWorkflow` 三个 Editor Agent Skill。
+- 详细证据见 [Week 04–07 验收记录](evidence/week-04-07-acceptance.md)。
+
 ## 未由无界面脚本声称完成的主观证据
 
 本轮按要求不使用 Windows 界面控制，因此没有伪造以下人工体验证据：10/25/50 米三轮主观枪感记录、连续五分钟人工战斗观察、未剪辑操作视频。实现与参数链已经就绪，这些属于后续真人体验采样和作品集录制，不影响源码、资产与自动 E2E 的完成状态。
 
 ## 下一阶段
 
-进入 Week 04 前，优先把现有无界面 E2E 扩展为延迟/丢包与跨客户端射击关联日志，再推进服务器校验、ArmorSet、AI 与撤离闭环。
+进入 Week 08 前，先由真人补录终端、背包、死亡容器、撤离和三类 AI 的完整操作证据；随后按 Week 08–10 契约接入 Go 身份、双人房、Ticket、仓库与幂等结算。当前不扩展 Packaged Server Target，也不触碰受保护的源码引擎目录。

@@ -55,7 +55,19 @@ void AExtractionZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AExtractionZone::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ThisClass, ZoneId);
 	DOREPLIFETIME(ThisClass, ZoneState);
+}
+
+bool AExtractionZone::InitializeZoneId(FName InZoneId)
+{
+	if (!HasAuthority() || InZoneId.IsNone())
+	{
+		return false;
+	}
+	ZoneId = InZoneId;
+	ForceNetUpdate();
+	return true;
 }
 
 void AExtractionZone::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor,

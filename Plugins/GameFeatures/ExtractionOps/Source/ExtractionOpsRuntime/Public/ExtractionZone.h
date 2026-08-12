@@ -37,6 +37,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Extraction Ops|Extraction")
 	FName GetZoneId() const { return ZoneId; }
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Extraction Ops|Extraction")
+	bool InitializeZoneId(FName InZoneId);
+
 	UPROPERTY(BlueprintAssignable, Category="Extraction Ops|Extraction")
 	FExtractionZoneStateChanged OnZoneStateChanged;
 
@@ -44,7 +47,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Extraction Ops|Extraction")
 	TObjectPtr<UBoxComponent> ExtractionVolume;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Extraction Ops|Extraction")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Replicated, Category="Extraction Ops|Extraction")
 	FName ZoneId = TEXT("Extraction_A");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Extraction Ops|Extraction", meta=(ClampMin="1.0"))

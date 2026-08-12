@@ -27,7 +27,7 @@ public:
 	const FExtractionMatchSnapshot& GetSnapshot() const { return Snapshot; }
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Extraction Ops|Match")
-	bool StartRaid(FName SelectedExtractionZoneId);
+	bool StartRaid(FName SelectedExtractionZoneId, double RaidEndServerTime);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Extraction Ops|Match")
 	bool ActivateTerminal(FName TerminalId);

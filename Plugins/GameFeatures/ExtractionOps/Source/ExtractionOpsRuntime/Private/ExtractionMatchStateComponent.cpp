@@ -21,17 +21,20 @@ void UExtractionMatchStateComponent::GetLifetimeReplicatedProps(TArray<FLifetime
 	DOREPLIFETIME(ThisClass, Snapshot);
 }
 
-bool UExtractionMatchStateComponent::StartRaid(FName SelectedExtractionZoneId)
+bool UExtractionMatchStateComponent::StartRaid(FName SelectedExtractionZoneId, double RaidEndServerTime)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || SelectedExtractionZoneId.IsNone()
+		|| RaidEndServerTime <= 0.0
 		|| !FExtractionStateRules::CanTransitionMatch(Snapshot.MatchState, EExtractionMatchState::InRaid))
 	{
 		return false;
 	}
 
 	FExtractionMatchSnapshot NewSnapshot = Snapshot;
+	NewSnapshot.MatchId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
 	NewSnapshot.MatchState = EExtractionMatchState::InRaid;
 	NewSnapshot.ActiveExtractionZoneId = SelectedExtractionZoneId;
+	NewSnapshot.RaidEndServerTime = RaidEndServerTime;
 	CommitSnapshot(NewSnapshot);
 	return true;
 }

@@ -70,7 +70,8 @@ void UExtractionDebugHUDWidget::RefreshSnapshotText()
 	const FString Text = FString::Printf(
 		TEXT("%s | Authority=%s | Role=%s/%s\n")
 		TEXT("PC=%s PS=%s | Experience=%s\n")
-		TEXT("Match=%s Threat=%s Run=%s"),
+		TEXT("Match=%s Threat=%s Run=%s\n")
+		TEXT("Health=%.0f/%.0f Armor=%.0f/%.0f"),
 		*Snapshot.NetMode,
 		Snapshot.bHasAuthority ? TEXT("true") : TEXT("false"),
 		*Snapshot.LocalRole,
@@ -80,7 +81,8 @@ void UExtractionDebugHUDWidget::RefreshSnapshotText()
 		Snapshot.ExperienceId.IsEmpty() ? TEXT("not loaded") : *Snapshot.ExperienceId,
 		Snapshot.bHasMatchState ? *ExtractionDebugHUD::GetEnumName(Snapshot.MatchState) : TEXT("missing"),
 		Snapshot.bHasMatchState ? *ExtractionDebugHUD::GetEnumName(Snapshot.ThreatLevel) : TEXT("missing"),
-		Snapshot.bHasRunState ? *ExtractionDebugHUD::GetEnumName(Snapshot.RunState) : TEXT("missing"));
+		Snapshot.bHasRunState ? *ExtractionDebugHUD::GetEnumName(Snapshot.RunState) : TEXT("missing"),
+		Snapshot.Health, Snapshot.MaxHealth, Snapshot.Armor, Snapshot.MaxArmor);
 
 	SnapshotText->SetText(FText::FromString(Text));
 }

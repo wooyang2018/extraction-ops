@@ -6,7 +6,11 @@
 #include "ExtractionRunStateComponent.h"
 #include "GameModes/LyraExperienceDefinition.h"
 #include "GameModes/LyraExperienceManagerComponent.h"
+#include "AbilitySystem/Attributes/ExtractionArmorSet.h"
+#include "AbilitySystem/Attributes/LyraHealthSet.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -134,6 +138,16 @@ bool UExtractionDebugDataLibrary::GetNetworkDebugSnapshot(
 		{
 			OutSnapshot.bHasRunState = true;
 			OutSnapshot.RunState = RunState->GetSnapshot().RunState;
+		}
+		if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerState))
+		{
+			OutSnapshot.Health = ASC->GetNumericAttribute(ULyraHealthSet::GetHealthAttribute());
+			OutSnapshot.MaxHealth = ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute());
+			if (ASC->HasAttributeSetForAttribute(UExtractionArmorSet::GetArmorAttribute()))
+			{
+				OutSnapshot.Armor = ASC->GetNumericAttribute(UExtractionArmorSet::GetArmorAttribute());
+				OutSnapshot.MaxArmor = ASC->GetNumericAttribute(UExtractionArmorSet::GetMaxArmorAttribute());
+			}
 		}
 	}
 

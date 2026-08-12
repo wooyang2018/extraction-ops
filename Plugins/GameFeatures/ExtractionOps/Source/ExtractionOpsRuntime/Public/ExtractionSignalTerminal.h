@@ -4,11 +4,14 @@
 
 #include "ExtractionOpsTypes.h"
 #include "GameFramework/Actor.h"
+#include "Interaction/IInteractableTarget.h"
+#include "Interaction/InteractionOption.h"
 
 #include "ExtractionSignalTerminal.generated.h"
 
 class UExtractionMatchStateComponent;
 class USceneComponent;
+class USphereComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FExtractionTerminalStateChanged,
@@ -17,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 
 /** World-facing signal terminal. Interaction abilities call BeginActivation on the server. */
 UCLASS(BlueprintType, Blueprintable)
-class EXTRACTIONOPSRUNTIME_API AExtractionSignalTerminal : public AActor
+class EXTRACTIONOPSRUNTIME_API AExtractionSignalTerminal : public AActor, public IInteractableTarget
 {
 	GENERATED_BODY()
 
@@ -25,6 +28,8 @@ public:
 	AExtractionSignalTerminal(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void GatherInteractionOptions(const FInteractionQuery& InteractQuery,
+		FInteractionOptionBuilder& InteractionBuilder) override;
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Extraction Ops|Terminal")
 	bool BeginActivation(AController* InstigatingController);
@@ -38,6 +43,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Extraction Ops|Terminal")
 	FName GetTerminalId() const { return TerminalId; }
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Extraction Ops|Terminal")
+	bool InitializeTerminalId(FName InTerminalId);
+
 	UPROPERTY(BlueprintAssignable, Category="Extraction Ops|Terminal")
 	FExtractionTerminalStateChanged OnTerminalStateChanged;
 
@@ -45,16 +53,23 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Extraction Ops|Terminal")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Extraction Ops|Terminal")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Extraction Ops|Terminal")
+	TObjectPtr<USphereComponent> InteractionVolume;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Replicated, Category="Extraction Ops|Terminal")
 	FName TerminalId;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Extraction Ops|Terminal", meta=(ClampMin="0.1"))
 	float ActivationDuration = 2.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Extraction Ops|Terminal", meta=(ClampMin="100.0"))
+	float MaximumActivationDistance = 350.0f;
+
 private:
 	UExtractionMatchStateComponent* FindMatchStateComponent() const;
 	void SetTerminalState(EExtractionTerminalState NewState);
 	void FinishActivation();
+	bool IsActivationStillValid() const;
 
 	UFUNCTION()
 	void OnRep_TerminalState(EExtractionTerminalState OldState);

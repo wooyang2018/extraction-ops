@@ -44,7 +44,7 @@ enum class ELyraAbilityTargetingSource : uint8
  * An ability granted by and associated with a ranged weapon instance
  */
 UCLASS()
-class ULyraGameplayAbility_RangedWeapon : public ULyraGameplayAbility_FromEquipment
+class LYRAGAME_API ULyraGameplayAbility_RangedWeapon : public ULyraGameplayAbility_FromEquipment
 {
 	GENERATED_BODY()
 
@@ -105,6 +105,14 @@ protected:
 	virtual ECollisionChannel DetermineTraceChannel(FCollisionQueryParams& TraceParams, bool bIsSimulated) const;
 
 	void PerformLocalTargeting(OUT TArray<FHitResult>& OutHits);
+
+	/**
+	 * Server-side extension point for projects that need stricter validation of
+	 * client-produced target data before ammo is committed or effects are applied.
+	 * The Lyra baseline accepts the data; game features can override this without
+	 * duplicating the ranged-weapon prediction pipeline.
+	 */
+	virtual bool ValidateTargetDataOnServer(const FGameplayAbilityTargetDataHandle& TargetData, FGameplayTag ApplicationTag, FString& OutFailureReason);
 
 	FVector GetWeaponTargetingSourceLocation() const;
 	FTransform GetTargetingTransform(APawn* SourcePawn, ELyraAbilityTargetingSource Source) const;
