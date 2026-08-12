@@ -268,7 +268,7 @@ Experience 描述“这一局选择什么配置”，GameFeature 描述“功能
 
 当前未完成或待验证：
 
-- 当前 `D:\Software\UE_5.8` 是 Installed Build，构建 `LyraServer Win64 Development` 会因该引擎发行版不支持 Server target 而失败；需要 Source Engine 基线后继续 Dedicated Server 和双客户端连接验证。
+- 当前 `D:\Software\UE_5.8` 是 Installed Build，不支持 `LyraServer` Target；12 周路线使用 Editor Dedicated Process + 两个 Editor Client Process 完成网络验证，并明确披露尚未完成发布级 Server 包。统一口径见 `docs/execution-baseline.md`。
 - Steam/EOS 真实线上登录、Session/Lobby、ReplicationGraph 大规模优化尚未作为当前完成项声明。
 - Go 后端、SQLite 账户/库存/结算持久化属于下一阶段；当前文档只描述其边界和接入位置。
 
@@ -282,4 +282,3 @@ Experience 描述“这一局选择什么配置”，GameFeature 描述“功能
 - [UE5 Source Build Windows 方案](ue5-source-build-windows.md)
 - [ExtractionOps Runtime 模块](../../Plugins/GameFeatures/ExtractionOps/Source/ExtractionOpsRuntime/)
 - [ExtractionOps GameFeature 描述](../../Plugins/GameFeatures/ExtractionOps/ExtractionOps.uplugin)
-

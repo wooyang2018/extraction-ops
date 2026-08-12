@@ -4,6 +4,10 @@
 
 把“能演示”提升为可重复、可测量、可定位：建立 Go 单元/集成测试、UE 功能测试、多人冒烟与故障矩阵；统一跨 Client/Server/Backend 日志；用 Unreal Insights 和网络分析完成一次有证据的优化。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。只使用 `D:\Software\UE_5.8`；不得访问受保护的 ue5-main 源码目录。Server 性能来自 Editor Dedicated Process，只作为开发期相对基线，不代表 Shipping/Packaged Server 性能。
+
 ## 与当前实现同步：从 4 个规则测试扩展证据链
 
 当前已有并通过的 Editor Automation 测试是：
@@ -93,9 +97,9 @@ match_id run_id server_instance_id error_code duration_ms
 
 ## 工作单元 4：性能与网络基线
 
-固定测试环境：Development/Shipping 构建类型、硬件、最终目标使用 1080p 固定画质、`L_ExtractionTest`、60 秒、单人/双人/双人+20 AI 或 100 个可复制 Pickup、RTT/丢包值。
+固定测试环境：客户端 Development/可用的 Shipping 配置、Editor Dedicated Process、硬件、1080p 固定画质、`L_ExtractionTest`、60 秒、单人/双人/双人+20 AI 或 100 个可复制 Pickup、RTT/丢包值。禁止把 Editor Dedicated Process 与并不存在的 Shipping Server 数据混在同一表格比较。
 
-每组记录：Client FPS/Game/Render/GPU、Server frame/tick、内存、发送/接收带宽、复制 Actor/RPC、Backend API p50/p95/p99、Settlement 成功/重试。
+每组记录：Client FPS/Game/Render/GPU、Editor Server frame/tick、内存、发送/接收带宽、复制 Actor/RPC、Backend API p50/p95/p99、Settlement 成功/重试。Server 数据只用于相同 Editor Dedicated Process 条件下的前后相对比较；报告显著标注它不能代表 Packaged/Shipping Server。
 
 抓两份 Unreal Insights：正常 2 人 60 秒、压力场景 60 秒；再抓 Networking Insights/Network Profiler。按 Game Thread → Server Tick → Tick/Timer → Replication/RPC → 加载/GC/UI 顺序分析。为前三个热点写“证据、假设、是否行动”。
 
@@ -118,6 +122,7 @@ match_id run_id server_instance_id error_code duration_ms
 - [ ] 有 Insights 与网络分析报告；
 - [ ] 一次优化使用相同条件给出前后数据；
 - [ ] 优化后正确性测试全部通过。
+- [ ] 性能报告明确区分客户端构建数据、Editor Server 开发基线和未完成的 Shipping Server 指标。
 
 ## 实现原理
 

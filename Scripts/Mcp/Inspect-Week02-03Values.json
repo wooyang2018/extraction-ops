@@ -1,0 +1,7 @@
+{
+  "toolset_name": "editor_toolset.toolsets.programmatic.ProgrammaticToolset",
+  "tool_name": "execute_tool_script",
+  "arguments": {
+    "script": "import json\n\ndef load(path):\n    return execute_tool('editor_toolset.toolsets.asset.AssetTools.load_asset', json.dumps({'asset_path': path}))['returnValue']\n\ndef get(path, properties):\n    value = execute_tool('editor_toolset.toolsets.object.ObjectTools.get_properties', json.dumps({'instance': load(path), 'properties': properties}))['returnValue']\n    return json.loads(value)\n\ndef run():\n    return {\n        'experience': get('/ShooterCore/Experiences/B_ShooterGame_Elimination', ['gameFeaturesToEnable', 'defaultPawnData', 'actionSets']),\n        'sharedInput': get('/ShooterCore/Experiences/LAS_ShooterGame_SharedInput', ['gameFeaturesToEnable', 'actions']),\n        'standardHud': get('/ShooterCore/Experiences/LAS_ShooterGame_StandardHUD', ['gameFeaturesToEnable', 'actions']),\n        'pawnData': get('/ShooterCore/Game/HeroData_ShooterGame', ['pawnClass', 'abilitySets', 'tagRelationshipMapping', 'inputConfig', 'defaultCameraMode']),\n        'rifleItem': get('/ShooterCore/Weapons/Rifle/ID_Rifle', ['fragments']),\n        'rifleEquipment': get('/ShooterCore/Weapons/Rifle/WID_Rifle', ['instanceType', 'abilitySetsToGrant', 'actorsToSpawn']),\n        'shotgunItem': get('/ShooterCore/Weapons/Shotgun/ID_Shotgun', ['fragments']),\n        'shotgunEquipment': get('/ShooterCore/Weapons/Shotgun/WID_Shotgun', ['instanceType', 'abilitySetsToGrant', 'actorsToSpawn'])\n    }\n"
+  }
+}

@@ -1,36 +1,30 @@
-# 第 1 周：环境基线与可重复构建
+# 第 1 周：Installed Build 环境与可重复多人基线
 
 ## 本周目标
 
-把工程从“偶尔能打开”变成可重复验证的 UE 5.8 开发基线：能够初始化 Lyra 资源、生成项目文件、分别构建 Editor/Client/Server、启动独立 Dedicated Server，并让两个客户端进入同一局。本周不添加玩法。
+把工程从“能够打开”变成可以重复构建和验证的 UE 5.8 基线：构建 Editor、运行原始 Lyra 战斗、启动一个 Editor Dedicated Process，并让两个 Editor Client Process 进入同一局。本周不增加玩法。
 
-## 与当前工程同步（先读）
+## 执行基线与当前事实
 
-当前已经完成 `LyraEditor Win64 Development` 构建，并通过 Unreal Editor MCP 运行了 ExtractionOps 自动化测试和 PIE 组件注入验证。不要重新创建工程或覆盖现有插件。
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周唯一引擎是 `D:\Software\UE_5.8`，不得访问基线中声明的受保护 ue5-main 源码目录。
 
-当前硬门槛是 `D:\Software\UE_5.8\Engine\Build\InstalledBuild.txt` 表明该引擎是 Installed Build，执行 `LyraServer Win64 Development` 会返回：
+当前已经验证：
 
-```text
-Server targets are not currently supported from this engine distribution.
-```
+- `LyraEditor Win64 Development` 曾经构建成功；
+- ExtractionOps 状态规则测试和 PIE 组件注入曾经通过；
+- `D:\Software\UE_5.8` 是 Installed Build；
+- 该 Installed Build 不支持 `LyraServer Win64 Development`。
 
-因此本周真正要完成的不是修改游戏代码，而是准备“支持 Server Target 的 UE 5.8 源码构建”，然后依次验证：
+因此本周不准备源码引擎，不重复执行预期失败的 Server Target 构建。多人运行验收使用 `UnrealEditor.exe -server -NullRHI` 和两个 `-game` 进程。这个结果证明独立无本地玩家的网络闭环，不代表已经完成可发布的 `LyraServer.exe`。
 
-1. 用新引擎构建 `LyraEditor`，确认项目与插件没有版本偏差；
-2. 构建 `LyraServer` 和 `LyraClient`；
-3. Server 独立进程加载 Lyra 基线地图；
-4. 两个 Client 直连同一 Server；
-5. 保存三个进程的命令、日志和版本信息。
+## 前置条件与路径
 
-只有上述五项全部通过，才把第 1 周标记完成。当前事实与后续变化同步记录在 [实施状态](implementation-status.md)。
-
-## 前置条件与路径约定
-
-- Windows 11、Epic Games Launcher、Unreal Engine 5.8 和 Visual Studio 2022 已安装。
-- Visual Studio Installer 中启用“使用 C++ 的游戏开发”、MSVC v143、Windows 10/11 SDK 和适用于 UE 的工具。
-- `<RepoRoot>` 表示仓库根目录；当前示例为 `D:\Document\AI\Codex\extraction-ops`。
-- `<UE_ROOT>` 表示 UE 5.8 安装目录，例如 `C:\Program Files\Epic Games\UE_5.8`。
-- `<LyraSource>` 表示通过 Fab/Launcher 创建的原始 Lyra 5.8 工程。
+- `<RepoRoot>`：`D:\Document\AI\Codex\extraction-ops`。
+- `<UE_ROOT>`：固定为 `D:\Software\UE_5.8`。
+- `<Project>`：`<RepoRoot>\LyraStarterGame.uproject`。
+- `<Map>`：`/ShooterMaps/Maps/L_Convolution_Blockout`。
+- Visual Studio 2022 已安装 C++ 游戏开发负载、MSVC v143 和匹配 Windows SDK。
+- Lyra 内容已经复制到当前工作区。本周只读验证，不重新运行可能覆盖 Content 的初始化流程。
 
 开始前执行：
 
@@ -38,215 +32,58 @@ Server targets are not currently supported from this engine distribution.
 Set-Location '<RepoRoot>'
 git status --short
 git branch --show-current
+git rev-parse HEAD
 ```
 
-成功信号：位于预期分支，且能区分已有修改。不要删除或覆盖不属于本周的修改。
+若工作区已有修改，先记录其所有者和范围；不得清理、覆盖或夹带无关改动。
 
 ## 本周时间预算（15–20 小时）
 
-| 工作单元 | 内容 | 预计时间 |
+| 工作单元 | 内容 | 时间 |
 | --- | --- | ---: |
-| 1 | 记录工具链并初始化 Lyra 资源 | 3–4 小时 |
-| 2 | 生成项目文件并构建 Editor | 3–4 小时 |
-| 3 | 建立单机可玩基线 | 2–3 小时 |
-| 4 | 构建 Server/Client 并完成双客户端连接 | 4–5 小时 |
-| 5 | Git、日志、复现脚本和周验收 | 3–4 小时 |
-
-如果工作单元 4 未完成，顺延本周，不进入第 2 周。
+| 1 | 环境、资产与仓库边界核验 | 2–3 小时 |
+| 2 | Editor 构建和单机 Lyra 基线 | 3–4 小时 |
+| 3 | Editor Dedicated Process 与双客户端 | 4–5 小时 |
+| 4 | 启动脚本、日志断言和故障测试 | 3–4 小时 |
+| 5 | 从零复验和证据整理 | 3–4 小时 |
 
 ## 先读什么
 
-1. `LyraStarterGame.uproject`：确认 `EngineAssociation`、模块和插件。
-2. `Source/LyraEditor.Target.cs`、`Source/LyraClient.Target.cs`、`Source/LyraServer.Target.cs`：理解三类构建目标。
-3. `Source/LyraGame/LyraGame.Build.cs`：了解模块依赖。
-4. `Scripts/Initialize-ExtractionOps.ps1` 和 `docs/asset-bootstrap.md`：了解资源初始化行为。
-5. Epic 的 Lyra、项目文件生成和 Dedicated Server 文档。
+1. [12 周执行基线](execution-baseline.md)：理解允许的引擎和进程边界。
+2. `LyraStarterGame.uproject`：确认 `EngineAssociation`、模块和插件。
+3. `Source/LyraEditor.Target.cs`、`Source/LyraClient.Target.cs`、`Source/LyraServer.Target.cs`：理解 Target 与运行进程不是同一个概念。
+4. `Scripts/Start-Week01-LocalMatch.ps1` 和 `Scripts/Start-Week01-Multiplayer.ps1`：理解端口、日志、进程所有权和清理策略。
+5. `Plugins/GameFeatures/ExtractionOps/ExtractionOps.uplugin`：确认自研插件边界。
 
-阅读记录只回答：文件解决什么问题、在哪种 Target 中运行、失败时去哪看日志。
+阅读产出必须能解释：为什么 Editor 构建成功不等于 Server Target 可构建，以及 Editor Dedicated Process 能证明什么、不能证明什么。
 
-## 工作单元 1：记录环境并初始化资源
+## 工作单元 1：环境与资产只读核验
 
-### 1.1 建立环境记录
+### 1.1 固定环境记录
 
-在个人学习日志中记录：
-
-```text
-日期：
-仓库 commit：
-UE 版本与路径：
-Visual Studio 版本：
-MSVC/Windows SDK：
-LyraSource：
-资源模式：CopyAssets：
-```
-
-用以下命令获取可复制的信息：
-
-```powershell
-git rev-parse HEAD
-& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' -Version
-```
-
-### 1.2 启用 Codex 的 MCP 工具（可选）
-
-如果本周使用 Codex 调用本地开发工具，先启动 Model Context Protocol（MCP）Server，再刷新 Codex 的工具清单。MCP Server 负责提供工具端点；Codex 刷新后才能发现新增、删除或更新过的工具。刷新工具不会代替启动 Server，Server 启动也不代表 Codex 已经拿到最新工具定义。
-
-在提供 `ModelContextProtocol` 命令的 IDE/宿主中，按以下顺序执行：
+记录：
 
 ```text
-ModelContextProtocol.StartServer
-ModelContextProtocol.RefreshTools Codex
+date:
+repository_commit:
+engine_root: D:\Software\UE_5.8
+engine_version:
+build_configuration: Win64 Development
+visual_studio:
+msvc:
+windows_sdk:
+lyra_asset_source:
 ```
 
-验证：
+使用 Installed Build 的 `UnrealEditor.exe -Version` 或 Editor About 信息记录完整版本。不得从受保护源码目录读取版本或 commit。
 
-- [ ] `StartServer` 执行后没有启动失败或端口占用错误；
-- [ ] `RefreshTools Codex` 完成后，Codex 能看到预期的 MCP 工具；
-- [ ] 工具调用指向当前仓库和当前测试环境，没有误连生产环境；
-- [ ] 环境记录中写下 Server 名称、工具清单版本和本次刷新时间。
+### 1.2 检查资产和版本控制边界
 
-常见问题：
-
-- Codex 看不到工具：先重新执行 `ModelContextProtocol.StartServer`，确认 Server 仍在运行，再执行 `ModelContextProtocol.RefreshTools Codex`；
-- 工具清单是旧的：配置或工具代码变更后重新刷新，必要时重启宿主；
-- Server 启动失败：检查端口占用、工作目录、依赖和权限，不要把 Token、密钥或本机绝对路径写入仓库；
-- 工具能看到但调用失败：区分“工具发现成功”和“工具运行成功”，保存调用参数、错误和对应 Server 日志。
-
-### 1.3 初始化 Lyra 资源
-
-关闭 Unreal Editor，再执行：
-
-```powershell
-Set-Location '<RepoRoot>'
-.\Scripts\Initialize-ExtractionOps.ps1 `
-  -LyraProject '<LyraSource>' `
-  -EngineRoot '<UE_ROOT>'
-```
-
-当前初始化脚本使用复制模式，将 Lyra 根 `Content/` 和仓库中对应插件的 `Content/` 复制到当前工作区；脚本不创建 Junction，也没有 `-CopyAssets` 参数。复制得到的 Lyra 原始 `Content/` 继续由 `.gitignore` 排除，修改不会回写 `LyraSource`；项目自研的 `Plugins/GameFeatures/ExtractionOps/Content/**` 已被显式豁免并必须进入版本控制。
-
-### 1.4 验证结果
-
-- [ ] 脚本识别到 UE 5.8 与 Lyra 5.8。
-- [ ] 根 `Content` 和需要的插件内容可访问。
-- [ ] `LyraStarterGame.uproject` 未被替换成别的版本。
-- [ ] `git status --short` 没有出现大批 `.uasset`、`Binaries` 或 `Intermediate`。
-
-失败时按顺序检查：LyraSource 是否包含 `.uproject` → 版本是否一致 → Editor 是否占用目录 → PowerShell 执行策略 → 目标资源目录是否已存在且不是错误的重解析点。不要手工复制一半资源后继续。
-
-## 工作单元 2：生成项目文件并构建 Editor
-
-### 2.1 生成项目文件
-
-优先再次运行初始化脚本的项目文件步骤。若需手动执行，使用：
-
-```powershell
-& '<UE_ROOT>\Engine\Build\BatchFiles\GenerateProjectFiles.bat' `
-  -project='<RepoRoot>\LyraStarterGame.uproject' -game -engine
-```
-
-如果 UE 5.8 安装中没有该脚本，使用初始化脚本已经支持的 UnrealBuildTool 路径，不自行下载其他版本 UBT。
-
-成功信号：生成 `.sln`/Rider 项目模型，输出最后没有 `ERROR`，`Source` 下所有 Target 可见。
-
-### 2.2 命令行构建 Editor
-
-```powershell
-& '<UE_ROOT>\Engine\Build\BatchFiles\Build.bat' `
-  LyraEditor Win64 Development `
-  '-Project=<RepoRoot>\LyraStarterGame.uproject' -WaitMutex -FromMsBuild
-```
-
-成功信号：退出码为 0，末尾出现 `BUILD SUCCESSFUL` 或等价成功信息，并生成可加载的 LyraEditor 模块。
-
-### 2.3 构建失败处理
-
-只处理第一条真正的 `error C...`、`UnrealBuildTool Exception` 或缺失模块信息：
-
-1. 确认命令使用 UE 5.8；
-2. 确认 VS 工作负载完整；
-3. 确认 `EngineAssociation` 为 `5.8`；
-4. 重新生成项目文件后只重试一次；
-5. 仍失败则把第一条错误、完整命令、环境版本写入学习日志。
-
-不要通过修改 Lyra 源码来绕过工具链错误。
-
-## 工作单元 3：建立 Editor 与单机可玩基线
-
-### 3.1 启动 Editor
-
-```powershell
-& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' `
-  '<RepoRoot>\LyraStarterGame.uproject' -log
-```
-
-等待 Shader 编译和 Asset Registry 扫描结束。打开 Lyra 自带的可玩 Experience/地图，不创建新地图。
-
-### 3.2 执行固定操作序列
-
-1. 使用 PIE 单玩家启动；
-2. 进入默认 Shooter Experience；
-3. 移动、跳跃、瞄准、射击、切换武器；
-4. 观察生命、弹药、准星和死亡/重生；
-5. 停止 PIE，保存 Output Log 中的第一条 Warning/Error 摘要。
-
-记录现有资产路径：Experience、PawnData、InputConfig、武器 ItemDefinition、HUD Layout。第 3 周将复用这些资产。
-
-通过标准：连续运行 5 分钟，无崩溃、缺失资产红字或无法进入玩法。
-
-## 工作单元 4：独立 Server、Client 与双客户端连接
-
-### 4.1 构建 Server 和 Client
-
-分别执行：
-
-```powershell
-& '<UE_ROOT>\Engine\Build\BatchFiles\Build.bat' `
-  LyraServer Win64 Development `
-  '-Project=<RepoRoot>\LyraStarterGame.uproject' -WaitMutex
-
-& '<UE_ROOT>\Engine\Build\BatchFiles\Build.bat' `
-  LyraClient Win64 Development `
-  '-Project=<RepoRoot>\LyraStarterGame.uproject' -WaitMutex
-```
-
-若 Development Client/Server 依赖已 Cook 内容，本周允许使用 UnrealEditor 的 `-server` 和 `-game` 进程完成网络基线，但必须把限制记录下来；第 9 周再完成独立打包进程。
-
-### 4.2 启动专用服务器
-
-先从 Editor 的目标地图复制准确包路径 `<MapPath>`，例如 `/Game/.../L_Convolution_Blockout`，再启动：
-
-```powershell
-& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' `
-  '<RepoRoot>\LyraStarterGame.uproject' '<MapPath>' `
-  -server -log -port=7777 -unattended -NoSound
-```
-
-成功信号：日志显示地图加载完成、NetDriver 创建成功并监听 `7777`；没有窗口渲染并不代表失败。
-
-### 4.3 启动两个客户端
-
-打开两个 PowerShell 窗口，各执行一次：
-
-```powershell
-& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' `
-  '<RepoRoot>\LyraStarterGame.uproject' 127.0.0.1:7777 `
-  -game -log -windowed -ResX=1280 -ResY=720
-```
-
-验证：
-
-- [ ] Server 日志出现两个不同连接；
-- [ ] 两个客户端进入同一地图；
-- [ ] 双方能看到对方移动；
-- [ ] 任一客户端退出后 Server 继续运行；
-- [ ] Server 关闭后客户端得到明确断开表现，不是假死。
-
-连接失败按顺序检查：Server 是否监听 → 地图包路径 → 端口占用/防火墙 → Client 与 Server 构建是否相同 → Experience 是否成功加载。
-
-## 工作单元 5：Git、日志和可重复验收
-
-### 5.1 检查仓库边界
+- 根 `Content/`、ShooterCore、ShooterMaps 和 ExtractionOps 可访问；
+- `LyraStarterGame.uproject` 仍指向预期 UE 5.8 基线；
+- 不重新执行 `Initialize-ExtractionOps.ps1`；
+- `Plugins/GameFeatures/ExtractionOps/Content/**` 被 Git 跟踪；
+- Lyra 原始 Content、Binaries、Intermediate 和 Saved 被忽略。
 
 ```powershell
 git status --short --ignored
@@ -254,55 +91,146 @@ git check-ignore Binaries Intermediate Saved Content
 git check-ignore -v Plugins/GameFeatures/ExtractionOps/Content/ExtractionOps.uasset
 ```
 
-确认生成目录和本地 Lyra 资产不会进入提交，同时确认最后一条命令命中 `.gitignore` 中的 `!Plugins/GameFeatures/ExtractionOps/Content/**` 否定规则，自研资产出现在 `git status`。不得提交账号、EOS 凭据、本机绝对引擎路径或 Saved 日志。
+最后一条应命中 `.gitignore` 中针对 ExtractionOps Content 的否定规则，使自研资产出现在 `git status`，而不是被忽略。
 
-### 5.2 保存证据
+## 工作单元 2：构建 Editor 与单机基线
 
-- 30 秒 Editor 单机可玩录屏；
-- 30 秒 Server 监听和两个连接的日志录屏；
-- Editor/Client/Server 三次构建的命令、耗时和退出码；
-- 一张 Target、模块和进程关系图；
-- 一篇“为什么 Editor 能运行不等于 Server 能运行”的短文。
+### 2.1 生成项目文件
 
-### 5.3 最终验收脚本
+```powershell
+& '<UE_ROOT>\Engine\Build\BatchFiles\GenerateProjectFiles.bat' `
+  -project='<Project>' -game -engine
+```
 
-从关闭所有 UE 进程开始，按“生成项目文件 → 构建 Editor → 启动 Server → 启动两个 Client → 加入 → 退出”完整重做一次。任何一步依赖未记录的手工修复，本周都不算通过。
+若 Installed Build 不提供该批处理入口，使用同一引擎内的 UnrealBuildTool 项目文件生成入口；不得下载其他版本 UBT。
+
+### 2.2 构建 Editor
+
+```powershell
+& '<UE_ROOT>\Engine\Build\BatchFiles\Build.bat' `
+  LyraEditor Win64 Development `
+  '-Project=<Project>' -WaitMutex
+```
+
+硬门槛：退出码为 0，ExtractionOpsRuntime 可加载，没有缺失模块或循环依赖。
+
+`LyraClient Win64 Development` 可以作为补充实验；若 Installed Build 或未 Cook 内容阻止运行，记录第一条真实错误即可，不把它作为本周失败。禁止执行已知不支持的 `LyraServer` Target。
+
+### 2.3 单机操作序列
+
+使用 `Scripts/Start-Week01-LocalMatch.ps1` 或等价命令进入原始 Shooter Experience：
+
+1. 移动、跳跃和观察；
+2. 瞄准、射击、换弹和切枪；
+3. 观察生命、弹药、准星、死亡和重生；
+4. 连续运行五分钟；
+5. 停止后记录日志中的第一条 Warning/Error，并判断是否影响验收。
+
+同时记录实际 Experience、PawnData、InputConfig、AbilitySet、武器 ItemDefinition 和 HUD Layout 路径，供第 2–3 周使用。
+
+## 工作单元 3：Editor Dedicated Process 与双客户端
+
+### 3.1 启动 Server
+
+优先使用 `Scripts/Start-Week01-Multiplayer.ps1`。等价核心命令为：
+
+```powershell
+& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' `
+  '<Project>' '/ShooterMaps/Maps/L_Convolution_Blockout?NumBots=2' `
+  -server -NullRHI -unattended -NoSound -NoSplash `
+  -port=7777 -log
+```
+
+成功信号：目标地图加载完成、NetDriver 创建成功、日志出现 `IpNetDriver listening on port 7777`。没有渲染窗口是预期行为。
+
+### 3.2 启动两个客户端
+
+```powershell
+& '<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe' `
+  '<Project>' '127.0.0.1:7777' `
+  -game -log -windowed -ResX=900 -ResY=600
+```
+
+第二个客户端使用不同日志和窗口位置。必须证明：
+
+- Server 日志出现两个独立 Login/Join；
+- 两个客户端进入同一地图和 NetDriver；
+- 双方能看到对方移动；
+- Server 没有本地 PlayerController、Pawn 或客户端 Widget；
+- 关闭一个客户端后另一个客户端和 Server 继续运行；
+- 关闭 Server 后客户端得到明确断线表现，不是假死。
+
+## 工作单元 4：脚本与故障验证
+
+启动脚本必须：
+
+- 只接受 `D:\Software\UE_5.8` 或调用者显式传入且等价的 UE 5.8 Installed Build；
+- 不搜索、读取或回退到受保护源码目录；
+- 启动前验证端口未占用；
+- 为 Server、Client1、Client2 写入独立时间戳日志；
+- 等待监听和两次 Join，超时后输出日志尾部；
+- 只清理脚本自己创建的 PID；
+- 支持只验证参数而不启动进程的模式。
+
+固定故障实验：端口已占用、错误地图、客户端早于 Server、关闭一个客户端、关闭 Server。每项记录可观察错误和恢复动作。
+
+## 工作单元 5：从零复验与证据
+
+关闭所有 UE 进程后，完整执行一次：
+
+```text
+记录版本 -> 生成项目文件 -> 构建 Editor -> 单机五分钟
+-> 启动 Server -> 启动两个 Client -> 两次 Join
+-> 移动复制 -> 退出一个 Client -> 关闭 Server
+```
+
+任何步骤依赖未记录的手工修复，都不算通过。
+
+保存：
+
+- Editor 构建命令、耗时和退出码；
+- Server 与两个 Client 的完整启动参数和日志；
+- 30 秒单机视频和 30 秒双客户端视频；
+- Target、进程和权威边界图；
+- “Editor Dedicated Process 不等于 Packaged Server”的限制说明。
 
 ## 验收目标
 
-- [ ] UE 5.8 能打开工程且无缺失模块/资产错误；
-- [ ] `LyraEditor Win64 Development` 构建成功；
-- [ ] `LyraClient` 与 `LyraServer` Target 可构建，或已明确记录 Cook 限制和 Editor 进程替代方案；
-- [ ] 独立 Server 监听 7777，两个客户端能进入同一局；
-- [ ] 原始 Lyra 战斗回路可以稳定运行；
-- [ ] Git 不追踪生成目录、Lyra 原始 Content 和本机密钥，但追踪 ExtractionOps 自研 Content；
-- [ ] 陌生人只看记录就能重复本周流程。
+- [ ] 使用 `D:\Software\UE_5.8` 构建 `LyraEditor Win64 Development` 成功；
+- [ ] 原始 ShooterCore 连续运行五分钟，无崩溃或缺失资产；
+- [ ] Editor Dedicated Process 监听 7777，且没有本地玩家或客户端 UI；
+- [ ] 两个 Editor Client Process 完成独立 Login/Join 并进入同一 NetDriver；
+- [ ] 双方看到移动复制，退出与断线行为正确；
+- [ ] 三个进程的命令、日志和退出结果可复现；
+- [ ] Git 忽略 Lyra 原始内容和生成目录，但跟踪 ExtractionOps 自研 Content；
+- [ ] 本周未访问或修改受保护源码目录；
+- [ ] 记录明确说明尚未完成 `LyraServer.exe`、Server Cook 或发布包。
 
-## 实现原理
+## 停止条件
 
-Unreal 的 Editor、Client 和 Server 是不同 Target。Editor 成功不代表无渲染 Server 或独立 Client 一定成功。先建立可重复基线，后续每次故障才能区分是环境问题还是本周代码问题。
-
-Dedicated Server 保存战局权威状态；客户端负责输入和表现。后续的伤害、拾取、撤离和结算都建立在这条边界上。
-
-## 常见问题与停止条件
-
-- 模块缺失：核对版本、Target、Build.cs 和项目文件，不删除源码。
-- Server 启动后立即退出：查看第一条 Error，核对地图、Experience 和 Server 可用插件。
-- 两客户端不能互相看到：先确认是否真的连接同一 Server，再检查地图和 Experience。
-- 初次启动很慢：Shader/Derived Data 构建可等待；若日志 10 分钟无进展再诊断。
-
-若 Editor、Server 或双客户端任一基线不稳定，停止增加功能，继续补课本周。
+- Editor 构建失败：只处理第一条真实编译/模块错误；不通过修改 Lyra 核心绕过工具链问题。
+- Server 未监听：依次检查地图包路径、端口、Experience 和日志第一条 Error。
+- 两客户端不能互见：先确认两次 Join 和相同 NetDriver，再检查 Pawn 复制。
+- 任一基线不稳定：停止进入第 2 周，不增加新资产掩盖问题。
 
 ## 本周作品集产出
 
-- 构建与运行记录；
-- Client/Server 录屏；
-- Target 与进程关系图；
-- 环境复现笔记和已知问题清单。
+- 可重复构建与启动记录；
+- Editor Dedicated Process + 双客户端视频；
+- Target/进程/权威边界图；
+- 环境清单、故障矩阵和已知限制。
 
 ## 参考资料
 
+- [12 周执行基线](execution-baseline.md)
 - [Lyra Sample Game](https://dev.epicgames.com/documentation/en-us/unreal-engine/lyra-sample-game-in-unreal-engine)
 - [Setting Up Dedicated Servers](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-dedicated-servers-in-unreal-engine)
-- [资源初始化说明](asset-bootstrap.md)
 - [项目 Target](../Source/LyraServer.Target.cs)
+
+## 2026-08-11 实施记录
+
+- `D:\Software\UE_5.8` 下 `LyraEditor Win64 Development` 构建成功。
+- `Start-Week01-Multiplayer.ps1` 已支持无界面自动烟测、指定 Experience、双 Join、单客户端退出存活和 Server 断线断言。
+- Extraction 最终通过日志：`Saved/Logs/Week01/Multiplayer-*-20260811-233349.log`。
+- ShooterCore 回归通过日志：`Saved/Logs/Week01/Multiplayer-*-20260811-232538.log`。
+- 详细证据见 [Week 01–03 验收记录](evidence/week-01-03-acceptance.md)。

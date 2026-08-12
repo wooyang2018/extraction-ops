@@ -2,23 +2,27 @@
 
 ## 本周目标
 
-把第 3 周战斗回路放进独立 Dedicated Server + 两客户端环境，明确每个动作的发起者、执行者和观察者。伤害、死亡和弹药结果由服务器确认；客户端本地篡改不能改变最终状态。
+把第 3 周战斗回路放进 Editor Dedicated Process + 两个 Editor Client Process，明确每个动作的发起者、执行者和观察者。伤害、死亡和弹药结果由服务器确认；客户端本地篡改不能改变最终状态。
+
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周只使用 `D:\Software\UE_5.8`；Editor Dedicated Process 是当前权威测试进程，但不等价于 Packaged Dedicated Server。不得访问受保护的 ue5-main 源码目录。
 
 ## 与总蓝图同步：Dedicated Server 双客户端证据
 
-这一周验证实时玩法网络边界；第 9 周再接 Backend 房间、Ticket、注册和心跳。当前 Installed Build 不支持 Server Target，必须先完成第 1 周源码引擎门槛。
+这一周验证实时玩法网络边界；第 9 周再接 Backend 房间、Ticket、注册和心跳。当前 Installed Build 不支持 Server Target，因此沿用第 1 周已验证的 Editor Dedicated Process，不等待源码引擎。
 
 固定启动拓扑：
 
 ```text
-LyraServer（独立进程，无本地玩家）
+Editor Dedicated Process（独立进程，无本地玩家、NullRHI）
   <- Client A（拥有自己的 Pawn/PlayerController）
   <- Client B（拥有自己的 Pawn/PlayerController）
 ```
 
 按以下顺序建立证据：
 
-1. 构建 Development Server/Client，保存完整命令与 commit；
+1. 构建 `LyraEditor Win64 Development`，保存完整命令与 commit，并复用第 1 周三个独立进程启动方式；
 2. Server 显式加载灰盒地图和 Extraction Experience；
 3. 两个 Client 分别连接，日志记录唯一连接与 PlayerState；
 4. A/B 互相观察移动、装备、射击、伤害、死亡；

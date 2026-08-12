@@ -4,6 +4,10 @@
 
 把前 11 周整理为陌生人能运行、能理解、能验证和能追问的求职作品。交付物包括最短启动路径、3 分钟真实演示、架构与时序图、性能/故障证据、简历描述、5 分钟讲解稿和模拟面试答案。
 
+## 执行基线与披露要求
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。最终构建和录屏只使用 `D:\Software\UE_5.8`；不得访问受保护的 ue5-main 源码目录。作品集必须明确说明当前 Server 是 Editor Dedicated Process，尚未完成 `LyraServer.exe`、Server Cook/Stage/Package 或 Steam 生产部署，不得用模糊的“Dedicated Server 已发布”表述。
+
 ## 与总蓝图同步：作品质量和外测门槛
 
 包装不能替代可玩性验证。最终至少邀请 8 名未参与开发的测试者，每人玩 3 局，并记录：
@@ -49,13 +53,13 @@
 
 ### 1.2 写“最快成功路径”
 
-根 README 首屏流程必须是：安装依赖 → 初始化 Lyra 资源 → 配置环境变量 → 启动 Backend/Server/两个 Client → 登录/进局 → 完成测试流程 → 正常关闭。每条命令可复制，不依赖个人路径。
+根 README 首屏流程必须是：安装依赖 → 初始化 Lyra 资源 → 配置环境变量 → 启动 Backend/Editor Dedicated Process/两个 Editor Client Process → 登录/进局 → 完成测试流程 → 正常关闭。每条命令可复制；允许通过显式 `EngineRoot` 参数传入本机路径，不把个人绝对路径写死在仓库。
 
 从新的 PowerShell 会话按 README 完整执行一次，记录总耗时和所有隐藏前置。任何口头补充都必须写回 README。
 
 ## 工作单元 2：架构与工程证据
 
-制作一张总架构图，明确：UE Client、Dedicated Server、Go Backend、SQLite、Lyra/ExtractionOps 边界和数据权威。每条箭头标协议/数据，不画没有实现的云组件。
+制作一张总架构图，明确：UE Client、Editor Dedicated Process、Go Backend、SQLite、Lyra/ExtractionOps 边界和数据权威。图注同时画出未来 Packaged Dedicated Server 但标记为“未实现”，不得让两者看起来已经等价。每条箭头标协议/数据，不画没有实现的云组件。
 
 制作三张时序图：登录/Room/分配/Join；Fire/Server 校验/Damage/复制；Extract/Settlement transaction/重复响应。每张包含 request_id/match_id/run_id、失败或重试路径和最终权威。
 
@@ -85,8 +89,8 @@ README 按顺序包含：项目一句话、演示、已实现功能、架构、�
 
 ```text
 多人撤离射击 Vertical Slice | UE5 / C++ / Lyra / GAS / Go
-- 扩展 Lyra GameFeature，完成 1–2 人合作专服战斗、搜刮、背包、Threat 与撤离闭环。
-- 由 Dedicated Server 权威校验伤害、物品和撤离，以短期 Ticket 连接 Go 控制面。
+- 扩展 Lyra GameFeature，在独立 Editor Server 进程中完成 1–2 人合作战斗、搜刮、背包、Threat 与撤离闭环。
+- 由无本地玩家的 Editor Dedicated Process 权威校验伤害、物品和撤离，以短期 Ticket 连接 Go 控制面。
 - 使用稳定 ID、SQLite transaction/唯一约束实现重连恢复和结算幂等。
 - 使用结构化日志、Unreal Insights 和网络分析完成故障定位及量化优化。
 ```
@@ -112,6 +116,7 @@ README 按顺序包含：项目一句话、演示、已实现功能、架构、�
 - [ ] 10 个追问均有 60–90 秒证据化回答；
 - [ ] 密钥、本地 DB、生成物和 Lyra/授权受限 Content 未提交，ExtractionOps 自研 Content 已提交；
 - [ ] 项目限制明确：本地 SQLite、单机调度、开发态身份、非生产反作弊。
+- [ ] README、视频和简历明确披露尚未完成 `LyraServer.exe`、Server Cook/Stage/Package 与 Steam 生产部署。
 
 ## 实现原理
 

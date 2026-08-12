@@ -2,8 +2,27 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "ExtractionDebugDataLibrary.h"
 #include "ExtractionOpsTypes.h"
 #include "Misc/AutomationTest.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FExtractionDebugSnapshotInvalidContextTest,
+	"ExtractionOps.DebugSnapshot.InvalidContext",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FExtractionDebugSnapshotInvalidContextTest::RunTest(const FString& Parameters)
+{
+	FExtractionNetworkDebugSnapshot Snapshot;
+	Snapshot.NetMode = TEXT("Stale");
+	Snapshot.bHasAuthority = true;
+
+	TestFalse(TEXT("A null world context cannot produce a snapshot"),
+		UExtractionDebugDataLibrary::GetNetworkDebugSnapshot(nullptr, nullptr, nullptr, Snapshot));
+	TestTrue(TEXT("Failure resets the output snapshot"), Snapshot.NetMode.IsEmpty());
+	TestFalse(TEXT("Failure cannot preserve stale authority"), Snapshot.bHasAuthority);
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FExtractionMatchStateRulesTest,

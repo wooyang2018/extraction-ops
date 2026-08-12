@@ -2,17 +2,19 @@
 
 ## 本周目标
 
-把第 8 周控制面接到真实专服生命周期：Backend 发现健康 Server、原子分配 Match、签发 Join Ticket、玩家连接、Server 上报 InGame/Completed，并在异常退出后由心跳过期识别。第一版只管理本机已有进程，不做自动扩缩容。
+把第 8 周控制面接到 Editor Dedicated Process 生命周期：Backend 发现健康 Server、原子分配 Match、签发 Join Ticket、玩家连接、Server 上报 InGame/Completed，并在异常退出后由心跳过期识别。第一版只管理本机已有进程，不做自动扩缩容。
+
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周使用 `D:\Software\UE_5.8` 的 Editor Dedicated Process 和 Editor Client Process；不得访问受保护的 ue5-main 源码目录。本周验证控制面和进程生命周期，不声称完成 Packaged Dedicated Server。
 
 ## 与当前工程同步：从直连证据升级到后台会话
 
-第 4 周应已经证明“独立 Server + 两个直连 Client”的实时玩法一致性。本周只增加身份、房间、分配和 Ticket，不重新设计射击/撤离复制。
-
-当前本机 Installed Build 不支持 Server Target；在源码引擎门槛解除前，本周保持未开始。不要用 Listen Server 或 Editor PIE 截图代替独立进程验收。
+第 4 周应已经证明“Editor Dedicated Process + 两个直连 Client”的实时玩法一致性。本周只增加身份、房间、分配和 Ticket，不重新设计射击/撤离复制。不要用 Listen Server 或同进程 PIE 截图代替三个独立进程验收。
 
 实施时按以下纵向切片推进：
 
-1. **静态直连**：一个打包 Server、两个 Client、固定地址，关闭 Editor 后仍能完成一局；
+1. **静态直连**：一个 Editor Dedicated Process、两个 Editor Client Process、固定地址，三个独立进程能完成一局；
 2. **注册心跳**：Server 启动后注册，Backend 只把有新鲜心跳的实例视为可用；
 3. **双人房间分配**：两名 Ready 玩家触发 Match，SQLite 事务原子占用一个 Server；
 4. **Ticket 进局**：Ticket 绑定七个稳定 ID 和 build version，Server 在 PreLogin 阶段校验；
@@ -23,14 +25,14 @@
 ## 前置条件与周门槛
 
 - 第 8 周登录到 Ticket 的身份链和 SQLite 重启持久化已通过。
-- 能构建/运行无 Editor 依赖的 Development Server；若 Cook 尚未完成，本周先完成 Cook/package。
-- Backend、Server、Client 的 `build_version` 必须一致。
+- 第 4 周三个独立进程网络证据和第 7 周完整对局已经通过。
+- Backend、Server、Client 的 `build_version` 必须一致，格式固定为 `<project_commit>+ue5.8-<installed_build_version>`；不得读取引擎源码 commit。
 
 ## 本周时间预算（15–20 小时）
 
 | 工作单元 | 内容 | 时间 |
 | --- | --- | ---: |
-| 1 | 打包 Server/Client 与启动参数 | 4 小时 |
+| 1 | 三进程启动参数与 Backend 接线 | 4 小时 |
 | 2 | Server 状态机、注册和心跳 | 3–4 小时 |
 | 3 | SQLite 原子分配器 | 4 小时 |
 | 4 | Ticket 校验与进局 | 3–4 小时 |
@@ -38,25 +40,25 @@
 
 ## 先读什么
 
-- `Source/LyraServer.Target.cs`、BuildGraph/打包脚本和目标地图 Cook 配置；
+- [12 周执行基线](execution-baseline.md)和第 1/4 周三进程启动脚本；
 - `GameModes/LyraGameMode.*` 的登录入口（PreLogin/Login/PostLogin）；
-- Command-Line Arguments 与 Dedicated Server packaging；
+- Unreal Command-Line Arguments、PreLogin/Login/PostLogin；
 - 第 8 周 `server_instances`、`matches`、`join_tickets` schema。
 
-## 工作单元 1：独立进程与参数契约
+## 工作单元 1：Editor 独立进程与参数契约
 
-Cook/package `L_ExtractionTest`、Extraction Experience 与全部引用资产，分别生成 Development Client/Server。先从命令行直接启动，不依赖 Editor。
+使用 `D:\Software\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe` 启动 `L_ExtractionTest` 的 Editor Dedicated Process，并用两个 `-game` Editor Client Process 连接。Server 使用 `-NullRHI -unattended -NoSound`，不得创建本地玩家或客户端 UI。
 
 固定 Server 参数：
 
 ```text
-map、experience、port、server_instance_id、build_version、region=local、
+map、experience、port、build_version、region=local、startup_nonce、
 backend_url、log_dir、network_debug
 ```
 
-启动日志逐项回显非敏感参数；完整 Token/密钥禁止打印。缺少 instance_id、backend_url 或 build_version 时启动失败并给明确错误，不用默认空字符串注册。
+`server_instance_id` 不从命令行传入；Server 每次进程启动自行生成全新 ID。启动日志逐项回显非敏感参数；完整 Token/密钥禁止打印。缺少 backend_url、build_version 或 startup_nonce 时启动失败并给明确错误，不用默认空字符串注册。
 
-成功信号：Server 独立进程加载地图并监听指定端口，Client 打包进程可直连；关闭 Editor 不影响运行。
+成功信号：Server 独立进程加载地图并监听指定端口，两个 `-game` 客户端可直连；Editor UI 不需要保持打开。限制必须记录：进程仍来自 UnrealEditor Installed Build，不是发布级 Server 包。
 
 ## 工作单元 2：Server 生命周期、注册和心跳
 
@@ -109,7 +111,7 @@ Ticket 绑定 ticket_id、player_id、room_id、match_id、run_id、server_insta
 
 ## 验收目标
 
-- [ ] 独立打包 Server/Client 不依赖 Editor；
+- [ ] Editor Dedicated Process 与两个 Editor Client Process 作为三个独立进程运行；
 - [ ] 参数契约完整且日志不泄密；
 - [ ] 注册、5 秒心跳和 15 秒过期生效；
 - [ ] Server 状态转换受控；
@@ -120,6 +122,7 @@ Ticket 绑定 ticket_id、player_id、room_id、match_id、run_id、server_insta
 - [ ] 握手失败只在预留释放/超时且 Ticket 未过期时允许重试；
 - [ ] 一局结束后进程 Draining 并关闭；
 - [ ] 一键脚本可启动整套本地环境并安全清理自身进程。
+- [ ] 证据明确披露当前没有 `LyraServer.exe`、Server Cook/Stage/Package。
 
 ## 实现原理
 
@@ -127,7 +130,7 @@ Dedicated Server 是数据面权威，Backend 是控制面。Available 表示 Se
 
 ## 常见问题与停止条件
 
-- 返回地址但连不上：检查 Available 的就绪条件、Cook 地图、端口和版本。
+- 返回地址但连不上：检查 Available 的就绪条件、地图、Experience、端口和版本。
 - 两 Match 分到同一 Server：UPDATE 必须包含旧状态并检查 rows affected。
 - 重启后旧 Ticket 可用：Ticket 必须绑定新的 instance_id 和 expiry。
 - 脚本误杀其他进程：只使用自己记录的 PID，不按进程名全杀。
@@ -147,3 +150,4 @@ Dedicated Server 是数据面权威，Backend 是控制面。Available 表示 Se
 - [Setting Up Dedicated Servers](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-dedicated-servers-in-unreal-engine)
 - [Packaging Projects](https://dev.epicgames.com/documentation/en-us/unreal-engine/packaging-unreal-engine-projects)
 - [Command-Line Arguments](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine)
+- [12 周执行基线](execution-baseline.md)

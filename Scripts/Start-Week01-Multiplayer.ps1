@@ -19,6 +19,11 @@ param(
     [ValidateRange(15, 300)]
     [int]$ReadyTimeoutSeconds = 120,
 
+    [string]$Experience = '',
+
+    [ValidateRange(0, 600)]
+    [int]$AutomatedSmokeSeconds = 0,
+
     [switch]$ValidateOnly
 )
 
@@ -160,6 +165,9 @@ $serverLog = Join-Path $logRoot "Multiplayer-Server-$timestamp.log"
 $client1Log = Join-Path $logRoot "Multiplayer-Client1-$timestamp.log"
 $client2Log = Join-Path $logRoot "Multiplayer-Client2-$timestamp.log"
 $mapUrl = "${Map}?NumBots=$NumBots"
+if ($Experience) {
+    $mapUrl += "?Experience=$Experience"
+}
 
 Write-Host 'Week 01: Dedicated Server plus two visible clients' -ForegroundColor Cyan
 Write-Host "Engine : $resolvedEngineRoot"
@@ -253,9 +261,14 @@ try {
             "-AbsLog=`"$($clientDefinition.Log)`""
         ) + $clientDefinition.ExtraArguments
 
+        if ($AutomatedSmokeSeconds -gt 0) {
+            $clientArguments += @('-unattended', '-NullRHI', '-NoSound')
+        }
+
         $clientProcess = Start-Process `
             -FilePath $editorExe `
             -ArgumentList $clientArguments `
+            -WindowStyle $(if ($AutomatedSmokeSeconds -gt 0) { 'Hidden' } else { 'Normal' }) `
             -PassThru
         $clientProcesses.Add($clientProcess)
         Write-Host "Client $($clientDefinition.Number) started. PID=$($clientProcess.Id)"
@@ -282,7 +295,55 @@ try {
         Write-Host 'Both clients completed Login/Join.' -ForegroundColor Green
     }
     else {
+        if ($AutomatedSmokeSeconds -gt 0) {
+            throw "Only $joinCount joins were detected within $ReadyTimeoutSeconds seconds."
+        }
         Write-Warning "Only $joinCount joins were detected within $ReadyTimeoutSeconds seconds. Check the client windows and logs."
+    }
+
+    if ($AutomatedSmokeSeconds -gt 0) {
+        if ($Experience -and -not (Wait-ForLogPattern `
+                -LogFile $serverLog `
+                -Pattern ([regex]::Escape($Experience)) `
+                -TimeoutSeconds $ReadyTimeoutSeconds `
+                -Process $serverProcess)) {
+            throw "The Server log did not confirm Extraction Experience '$Experience'."
+        }
+
+        if ($Experience -and -not (Wait-ForLogPattern `
+                -LogFile $serverLog `
+                -Pattern 'Granted Extraction rifle and shotgun' `
+                -TimeoutSeconds $ReadyTimeoutSeconds `
+                -Process $serverProcess)) {
+            throw 'The Server did not grant the Extraction default loadout.'
+        }
+
+        Write-Host "Holding the two-client session for $AutomatedSmokeSeconds seconds..." -ForegroundColor Yellow
+        $smokeDeadline = (Get-Date).AddSeconds($AutomatedSmokeSeconds)
+        while ((Get-Date) -lt $smokeDeadline) {
+            if ($serverProcess.HasExited -or @($clientProcesses | Where-Object HasExited).Count -gt 0) {
+                throw 'An owned UE process exited during the automated smoke interval.'
+            }
+            Start-Sleep -Seconds 1
+        }
+
+        Stop-OwnedProcess -Process $clientProcesses[0]
+        Start-Sleep -Seconds 3
+        if ($serverProcess.HasExited -or $clientProcesses[1].HasExited) {
+            throw 'Server or remaining client exited after Client 1 disconnected.'
+        }
+        Write-Host 'Client 1 disconnected; Server and Client 2 remained alive.' -ForegroundColor Green
+
+        Stop-OwnedProcess -Process $serverProcess
+        if (-not (Wait-ForLogPattern `
+                -LogFile $client2Log `
+                -Pattern 'Network Failure|Connection.*lost|Host closed the connection' `
+                -TimeoutSeconds 90 `
+                -Process $clientProcesses[1])) {
+            throw 'Client 2 did not log a clear disconnect after the Server stopped.'
+        }
+        Write-Host 'Client 2 recorded the Server disconnect.' -ForegroundColor Green
+        return
     }
 
     Write-Host ''

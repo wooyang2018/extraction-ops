@@ -1,4 +1,6 @@
-# UE 5.8.1 Windows 源码版构建与项目 Worktree 隔离手册
+# UE 5.8.1 Windows 源码版构建与项目 Worktree 隔离手册（归档）
+
+> 本文是历史调研材料，不属于当前 12 周执行路线。当前路线只使用 `D:\Software\UE_5.8` Installed Build；统一合同见 `docs/execution-baseline.md`。`D:\Software\UE_5.8.1_Source` 由用户独立维护，Codex 不得依据本文对该目录执行读取、Git、Setup、构建、运行、清理或修改。未来 ue5-main 迁移必须另写规格并锁定用户指定的里程碑 commit；本文中的 `5.8.1-release` 命令不得作为当前操作步骤。
 
 本手册用于在 Windows 上准备 UE 5.8.1 源码版，并在不污染 Launcher 版本项目的前提下构建 Lyra Editor、Client 和 Dedicated Server。
 

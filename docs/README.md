@@ -62,7 +62,7 @@
 
 ## 执行路线
 
-范围、20 周阶段门槛、技术证据链和量化验收以 [Vertical Slice 执行蓝图](vertical-slice-blueprint.md) 为准。以下 12 篇文档是技术专题索引，不代表必须逐周完成的交付排期。
+范围、20 周阶段门槛、技术证据链和量化验收以 [Vertical Slice 执行蓝图](vertical-slice-blueprint.md) 为准。所有周文档共同遵守 [12 周执行基线](execution-baseline.md)。以下 12 篇文档是技术专题索引，不代表必须逐周完成的交付排期。
 
 已经验证的实现与当前硬门槛见 [实施状态](implementation-status.md)。
 
@@ -73,7 +73,7 @@
 | 可编译、可复制、可测试的撤离底座 | 第 2 周 | Editor 构建可用 | GameFeature 自动注入 Match/Run，规则测试通过 |
 | 专属 Extraction Experience | 第 2 周 | 插件边界明确 | 加载 Experience 自动激活 ExtractionOps |
 | 两把武器与枪感 | 第 3 周 | Experience 可玩 | 两把武器定位不同，5 分钟战斗无状态卡死 |
-| Dedicated Server 双客户端 | 第 1、4、9 周 | 支持 Server Target 的源码引擎 | 先直连验证权威，再接房间/Ticket 生命周期 |
+| Editor Dedicated Process 双客户端 | 第 1、4、9 周 | UE 5.8 Installed Build 与三个独立进程可运行 | 先直连验证权威，再接房间/Ticket 生命周期；不声称已打包 Server |
 | GAS Armor 与交互能力接线 | 第 5 周 | ASC/输入链可解释 | ArmorSet 正确复制；玩家 Ability 经服务器校验启动终端，不能重复激活 |
 | 战利品与背包 | 第 6 周 | GAS 战斗终态稳定 | 12 格背包、8 种战利品、物品实例守恒 |
 | 可玩灰盒地图 | 第 7 周 | 枪战/背包可用 | 从 5 分钟玩法房扩到 12–15 分钟地图合同 |
@@ -86,7 +86,7 @@
 
 | 周次 | 主题 | 关键产出 |
 | --- | --- | --- |
-| 1 | 环境基线与可重复构建 | 能打开工程、编译 Client/Server、建立 Git 基线 |
+| 1 | 环境基线与可重复构建 | 构建 Editor、运行 Editor Server + 两 Client、建立 Git 基线 |
 | 2 | Lyra 架构阅读与工程边界 | 架构图、模块阅读笔记、ExtractionOps 功能插件 |
 | 3 | 客户端输入、角色、武器与 HUD | 一套可玩的客户端战斗回路 |
 | 4 | 多人联机与复制验证 | Dedicated Server + 两客户端 + 网络实验记录 |

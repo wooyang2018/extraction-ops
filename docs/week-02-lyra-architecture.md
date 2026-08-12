@@ -4,6 +4,10 @@
 
 沿一条真实调用链读懂 Lyra，理解并完成项目自己的 `ExtractionOps` GameFeature Plugin。完成后应能解释 Experience 如何激活 Feature、输入如何到达 Pawn/GAS、服务器状态如何进入 HUD，同时拥有一个可加载、可停用、不会污染 Lyra 核心的最小插件。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周只使用 `D:\Software\UE_5.8` 和 Editor/Editor Dedicated Process；不得访问受保护的 ue5-main 源码目录。第 1 周构建、单机和双客户端基线必须已经通过。
+
 ## 与当前实现同步（不要重复创建）
 
 GameFeature Runtime 底座已经存在于：
@@ -28,22 +32,23 @@ Plugins/GameFeatures/ExtractionOps/
 
 ### 本周要补的 Extraction Experience
 
-建议资产结构：
+资产结构固定为：
 
 ```text
 /ExtractionOps/Experiences/B_ExtractionExperience
 /ExtractionOps/Experiences/DA_ExtractionActionSet
 /ExtractionOps/Pawns/DA_ExtractionPawnData
 /ExtractionOps/UI/W_ExtractionHUDLayout
+/ExtractionOps/UI/WBP_ExtractionDebugHUD
 ```
 
 实施顺序：
 
 1. 复制最接近第三人称射击的 Lyra Experience，先记录所有原始引用；
 2. 改名并放入 ExtractionOps，不复制 Character 类、ASC 或动画系统；
-3. 在 Experience/ActionSet 的 GameFeature 列表中加入 `ExtractionOps` 和必需的 `ShooterCore`；
-4. PawnData 第一版继续引用 Lyra 可工作的 Pawn、AbilitySet 和 InputConfig；
-5. HUD 第一版只显示 Experience 已加载、NetMode、MatchState、Threat、RunState；
+3. 在 Experience 的 GameFeature 列表中加入 `ExtractionOps` 和必需的 `ShooterCore`；GameFeatureData 继续负责组件和 Widget Action；
+4. PawnData 第一版继续引用 Lyra 可工作的 Pawn、AbilitySet、InputConfig 和武器；第 3 周再替换项目专属输入与武器链；
+5. HUD Layout 本周建立骨架，Debug HUD 显示 Experience、NetMode、MatchState、Threat 和 RunState；第 3 周在同一 Layout 上增加武器 HUD；
 6. 用该 Experience 启动 PIE，不再手工调用 MCP 激活 GameFeature；
 7. 验证退出 Experience 后 Feature 能正确停用，不残留组件或委托。
 
@@ -51,11 +56,11 @@ Plugins/GameFeatures/ExtractionOps/
 
 ## 前置条件与周门槛
 
-- 第 1 周 Editor、Server 和双客户端基线已通过。
+- 第 1 周 Editor、Editor Dedicated Process 和双客户端基线已通过。
 - `<RepoRoot>` 当前为 `D:\Document\AI\Codex\extraction-ops`；本周插件路径是 `<RepoRoot>\Plugins\GameFeatures\ExtractionOps`。
 - 开始前保存 `git status --short` 和可玩基线录屏；出现回归时必须能回到此基线。
 
-第 1 周网络基线未通过时，可以阅读已有插件和运行 Editor 测试，但不把 Experience 的独立 Server 验收标为完成。
+第 1 周网络基线未通过时，可以阅读已有插件和运行 Editor 测试，但不把 Experience 的 Editor Dedicated Process 验收标为完成。
 
 ## 本周时间预算（15–20 小时）
 
@@ -145,7 +150,7 @@ Plugins/GameFeatures/ExtractionOps/
 
 ### 2.3 检查插件状态
 
-在 Game Features 面板找到插件，分别执行 Load/Activate 与 Deactivate。验证停用后不会破坏 Lyra 默认 Experience。
+在 Game Features 面板找到插件，验证 Load/Activate。停用测试必须先退出使用 ExtractionOps 资产的 Experience、停止 PIE 并切回默认 Lyra Experience，再执行 Deactivate；禁止在活动 World 仍引用插件资产时强制卸载。验证停用后不会破坏 Lyra 默认 Experience。
 
 ## 工作单元 3：现有权威组件与 Experience 激活
 
@@ -155,13 +160,14 @@ Plugins/GameFeatures/ExtractionOps/
 
 ### 3.2 创建 Extraction Experience
 
-在插件 Content 中复制最接近的 ShooterCore Experience 或创建引用它的组合资产，命名 `B_ExtractionExperience`。复用现有 PawnData、输入和武器，不复制整套 Lyra 资产。
+从 `/ShooterCore/Experiences/B_ShooterGame_Elimination` 及其标准 ActionSet/HUD 提取最小组合，创建唯一的 `B_ExtractionExperience`。复用现有 Pawn、ASC、移动、动画、AbilitySet、输入和武器，不复制整套 Lyra 资产。
 
-复用现有 `/ExtractionOps/ExtractionOps` GameFeatureData，不再创建第二个同名事实来源。按需要增加最小 Action：
+复用现有 `/ExtractionOps/ExtractionOps` GameFeatureData，不再创建第二个同名事实来源。职责固定为：
 
-- 激活插件；
-- 使用 `GameFeatureAction_AddWidget` 注入调试 UI；
-- 后续周再增加 Ability/Input Action。
+- `B_ExtractionExperience` 请求激活 `ShooterCore` 与 `ExtractionOps`；
+- GameFeatureData 使用 `GameFeatureAction_AddComponents` 注入 MatchState/RunState；
+- GameFeatureData 使用 `GameFeatureAction_AddWidgets` 注入调试 UI；
+- 第 3 周在已有 Experience/PawnData/HUD 上增加 Input 和武器配置，不重新创建它们。
 
 在测试地图 World Settings 或启动参数中选择 `B_ExtractionExperience`。成功信号：Experience 加载完成，MatchState/RunState 组件出现，原 Shooter 行为仍可用。
 
@@ -169,26 +175,38 @@ Plugins/GameFeatures/ExtractionOps/
 
 ### 4.1 定义只读调试数据
 
-创建一个轻量 C++ Widget/ViewModel 基类或数据提供组件，向 Blueprint 暴露：
+定义唯一只读结构 `FExtractionNetworkDebugSnapshot`，并通过 Blueprint 可调用的 `UExtractionDebugDataLibrary::GetNetworkDebugSnapshot` 生成快照。结构字段固定为：
 
-- `GetNetMode()`；
-- `HasAuthority()`；
-- `GetLocalRole()`/`GetRemoteRole()`；
+- NetMode；
+- HasAuthority；
+- LocalRole/RemoteRole；
 - 本地 PlayerController 与 PlayerState 是否有效；
-- 当前 Experience 名称。
+- 当前 Experience Primary Asset ID；
+- MatchState、Threat Level 和本地 RunState 摘要。
 
-不在 Widget 中缓存或修改游戏状态。
+接口只读取 GameState、PlayerState、Pawn 和 Experience Manager；不保存第二份玩法状态。Widget 可以缓存上一次用于比较的显示快照，但不得修改游戏状态。
 
 ### 4.2 创建 Blueprint Widget
 
 在 `Content/UI` 创建 `WBP_ExtractionDebugHUD`：
 
 1. 用文本控件显示上述字段；
-2. 通过事件或低频调试定时器刷新，禁止每帧重建 Widget；
+2. 优先订阅已有状态委托；网络角色等无委托字段使用不高于 2 Hz 的调试定时器，禁止 Tick 全量扫描或每帧重建 Widget；
 3. 使用 GameFeature Action 注入 HUD Slot；
 4. 插件停用时 Widget 必须移除。
 
-验证矩阵：单机 PIE、Listen Server、独立 Server + 两 Client。拥有方应显示 AutonomousProxy，另一客户端看到的对方一般为 SimulatedProxy，Server 显示 Authority。
+验证矩阵：单机 PIE、Listen Server、Editor Dedicated Process + 两个 Editor Client Process。拥有方应显示 AutonomousProxy，另一客户端看到的对方一般为 SimulatedProxy；Server 只写 Authority 日志，不创建 Widget。
+
+### 4.3 Unreal Editor MCP 操作合同
+
+创建或修改 `.uasset` 时固定执行：
+
+1. 先发现可用 Toolset 和项目 Blueprint Agent Skill；
+2. 所有 MCP 调用串行执行并逐项检查明确返回值；
+3. 编辑前保存当前资产，完成一个逻辑单元后编译并再次保存；
+4. 等待 Blueprint 编译完成，检查 Compiler Results 和 Output Log；
+5. PIE 运行期间只观察和测试，不修改资产；
+6. MCP 断开时停止资产实施，不使用二进制文件脚本伪造 `.uasset`。
 
 ## 工作单元 5：架构验收与阅读产出
 
@@ -249,3 +267,12 @@ Lyra 的 Experience 负责描述一局需要装配哪些 Feature、PawnData、Ab
 - [Game Features and Modular Gameplay](https://dev.epicgames.com/documentation/en-us/unreal-engine/game-features-and-modular-gameplay-in-unreal-engine)
 - [Gameplay Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine)
 - [LyraGame 源码说明](../Source/LyraGame/README.md)
+
+## 2026-08-11 实施记录
+
+- 已创建并保存唯一的 `B_ExtractionExperience`、`DA_ExtractionActionSet`、`DA_ExtractionPawnData`、`W_ExtractionHUDLayout` 与 `WBP_ExtractionDebugHUD`。
+- Experience 自动请求 `ShooterCore` 与 `ExtractionOps`，不依赖手工激活 Feature。
+- `FExtractionNetworkDebugSnapshot` 与 `UExtractionDebugDataLibrary` 已实现；Widget 通过 `UExtractionDebugHUDWidget` 每 0.5 秒（2 Hz）只读刷新，不使用 Tick 扫描。
+- GameFeatureData 注入 MatchState、RunState 与 Server-only 默认装备组件；Debug HUD 由项目 HUD ActionSet 注入。
+- Blueprint/Widget Blueprint 编译成功，核心资产检查 Missing 0、Dirty 0。
+- 详细资产链和运行证据见 [Week 01–03 验收记录](evidence/week-01-03-acceptance.md)。

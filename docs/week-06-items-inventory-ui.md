@@ -4,6 +4,10 @@
 
 基于 Lyra Inventory/Equipment 实现服务器权威的简单槽位背包：稳定物品定义、唯一实例、拾取、移动、堆叠、拆分、装备、使用、丢弃和 UI。对局外永久仓库仍留给第 8–10 周 Backend。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周只使用 `D:\Software\UE_5.8` 和 Editor Dedicated Process；不得访问受保护的 ue5-main 源码目录。武器资产必须引用第 3 周按职责确定的清单，不再使用模糊的聚合名称。
+
 ## 与总蓝图同步：战利品与 12 格背包
 
 本 Slice 的内容合同是 12 格本局背包、2 类主武器、1 个治疗物品和 8 种三档价值战利品。第一版不要实现重量、嵌套容器、俄罗斯方块占格、制作或交易。
@@ -70,8 +74,9 @@ PersistentStash：Backend 持久化对象，本周不实现
 
 ```text
 Weapons（复用第 3 周）
-  DA_ExtractionRifle
-  DA_ExtractionShotgun
+  Rifle: ID_ExtractionRifle -> WID_ExtractionRifle -> B_WeaponInstance_ExtractionRifle
+  Shotgun: ID_ExtractionShotgun -> WID_ExtractionShotgun -> B_WeaponInstance_ExtractionShotgun
+  AbilitySet/Fire/Reload/Damage/表现使用第 3 周记录的项目资产或 Lyra 复用路径
 
 Support（不计入 8 种价值战利品）
   DA_Ammo_Rifle
@@ -93,7 +98,7 @@ Valuable Tier 3
   DA_Valuable_PrototypeChip
 ```
 
-名称可以在真正创建资产前统一调整一次，但数量、类别和三档价值分布保持不变。弹药是武器运行资源，不算作八种可结算 Valuable。
+第 3 周武器职责链是唯一命名来源，本周不得再改名或创建单一 Rifle/Shotgun 聚合资产。弹药是武器运行资源，不算作八种可结算 Valuable；若 Lyra 5.8 使用 Tag Stack/Cost 而不是独立 Ammo Definition，则 `DA_Ammo_*` 改为对应真实 Definition/Tag 映射，不创建空包装资产。
 
 ## 工作单元 2：物品资产与地面拾取
 

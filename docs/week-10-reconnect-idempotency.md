@@ -4,6 +4,10 @@
 
 让网络和 HTTP 请求可以重复、最终结果不能重复：玩家断线后 90 秒内恢复同一 Pawn/Run；Dedicated Server 生成权威结算；SQLite transaction、状态条件和唯一约束保证重复或并发结算只发奖一次。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本文中的 Dedicated Server 指 Editor Dedicated Process；只使用 `D:\Software\UE_5.8`，不得访问受保护的 ue5-main 源码目录。结算正确性不依赖 Server Target 的打包形式。
+
 ## 与总蓝图同步：Go 后台与幂等结算闭环
 
 本周要闭合的是“至少一次发送、至多一次产生经济效果”。网络超时后 Server 无法判断 Backend 是否已提交，因此一定会重试；正确性必须来自同一个 `idempotency_key`、数据库唯一约束和单个短事务，而不是假设请求只到达一次。

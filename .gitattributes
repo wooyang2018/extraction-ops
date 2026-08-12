@@ -1,10 +1,5 @@
-# Unreal Engine binary assets should use Git LFS.
-*.uasset filter=lfs diff=lfs merge=lfs -text
+# The GitHub repository does not provide Git LFS, so the small vertical-slice
+# assets in this repository are stored as ordinary Git binary files.
 *.umap filter=lfs diff=lfs merge=lfs -text
 *.ubulk filter=lfs diff=lfs merge=lfs -text
 *.pak filter=lfs diff=lfs merge=lfs -text
-
-# These small vertical-slice assets are intentionally stored as ordinary Git files.
-/Plugins/GameFeatures/ExtractionOps/Content/ExtractionOps.uasset -filter -diff -merge -text
-/Plugins/GameFeatures/ExtractionOps/Content/World/Extraction/B_ExtractionZone.uasset -filter -diff -merge -text
-/Plugins/GameFeatures/ExtractionOps/Content/World/Terminals/B_SignalTerminal.uasset -filter -diff -merge -text

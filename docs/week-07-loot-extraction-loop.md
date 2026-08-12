@@ -4,6 +4,10 @@
 
 把战斗和背包串成一局完整 Vertical Slice：进入测试地图、搜刮地面物品/容器、战斗、撤离或死亡、查看本局结果。交互、倒计时、掉落和结果全部由 Dedicated Server 决定。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本文中的 Dedicated Server 在当前路线均指 Editor Dedicated Process；只使用 `D:\Software\UE_5.8`，不得访问受保护的 ue5-main 源码目录。
+
 ## 与当前实现同步：灰盒、终端、撤离和 Threat AI
 
 已经存在的代码不要重写：`UExtractionMatchStateComponent`、`UExtractionRunStateComponent`、`AExtractionSignalTerminal`、`AExtractionZone` 以及对应 Blueprint。当前缺少的是把它们放入专属 Experience/地图，并接入交互、AI、HUD 和结果流程。

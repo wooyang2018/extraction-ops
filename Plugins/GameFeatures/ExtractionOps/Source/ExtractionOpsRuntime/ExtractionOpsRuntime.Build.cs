@@ -24,7 +24,8 @@ public class ExtractionOpsRuntime : ModuleRules
 				"GameplayTags",
 				"GameplayMessageRuntime",
 				"LyraGame",
-				"NetCore"
+				"NetCore",
+				"UMG"
 			});
 	}
 }

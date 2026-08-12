@@ -4,6 +4,10 @@
 
 在第 3–4 周可用网络战斗链上，沿用 `ULyraAbilitySystemComponent`、HealthSet、CombatSet 和武器 Ability，增加 ExtractionOps 自己的 Gameplay Tags、一个专属 AttributeSet，以及可预测/可阻断的战斗能力。重点是掌握 Ability、Attribute、Effect、Cue 和普通组件的边界。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。本周只使用 `D:\Software\UE_5.8` 和 Editor Dedicated Process；不得访问受保护的 ue5-main 源码目录。ArmorSet 是本周必做项，不提前回填到第 1–3 周。
+
 ## 与总蓝图同步：GAS 交互能力接线
 
 当前 `AExtractionSignalTerminal` 已实现服务器计时和 Threat 更新，但还没有从玩家输入接入。不要给终端添加“任何客户端都能调用”的 Server RPC：场景 Actor 通常不归该客户端所有，RPC Ownership 不成立。
@@ -72,22 +76,21 @@ Enhanced Input: Interact
 
 ### 2.1 固定标签表
 
-在插件的原生标签或配置中只建立本项目需要的集合：
+先列出 Lyra 已有标签映射；只对缺失的项目语义在 `ExtractionOps.*` 命名空间中新增：
 
 ```text
-State.Aiming
-State.Reloading
-State.Dead
-State.Extracting
-Ability.Fire
-Ability.Reload
-Weapon.Rifle
-Weapon.Pistol
-Damage.Bullet
-Damage.Environment
+ExtractionOps.State.Aiming
+ExtractionOps.State.Reloading
+ExtractionOps.State.Extracting
+ExtractionOps.Ability.Fire
+ExtractionOps.Ability.Reload
+ExtractionOps.Weapon.Rifle
+ExtractionOps.Weapon.Shotgun
+ExtractionOps.Damage.Bullet
+ExtractionOps.Damage.Environment
 ```
 
-若 Lyra 已存在语义完全相同的标签，复用现有标签并在表中记录映射，不创建近义重复项。
+Death 等 Lyra 已存在且语义完全相同的标签直接复用并在表中记录映射，不创建近义重复项。第 3 周已经使用的标签不得改名；本周只补齐 Armor、Interaction、Extraction 和 Damage 所需集合。
 
 ### 2.2 创建 `UExtractionArmorSet`
 
@@ -119,7 +122,7 @@ MVP 数值和边界固定为：出生时 `Armor=MaxArmor=30`；Bullet Damage 先
 
 ### 4.1 Fire/Reload 扩展
 
-复用 Lyra Ranged Weapon Ability；只在需要项目标签、护甲或失败原因时建立 Extraction 派生类/配置。Reload Ability 必须检查：武器存在、未满弹、有备用弹、非 Dead、非已 Reloading；激活时授予 `State.Reloading`，结束/取消/死亡时必定移除。
+复用 Lyra Ranged Weapon Ability；只在需要项目标签、护甲或失败原因时建立 Extraction 派生类/配置。Reload Ability 必须检查：武器存在、未满弹、有备用弹、非 Dead、非已 Reloading；激活时授予 Lyra 映射标签或 `ExtractionOps.State.Reloading`，结束、取消或死亡时必定移除。
 
 同一工作单元完成本页“GAS 交互能力接线”，确保 Interact Ability 经服务器校验后调用终端，而不是让终端接收无 Ownership 的客户端 RPC。
 

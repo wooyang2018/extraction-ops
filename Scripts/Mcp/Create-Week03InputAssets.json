@@ -1,0 +1,7 @@
+{
+  "toolset_name": "editor_toolset.toolsets.programmatic.ProgrammaticToolset",
+  "tool_name": "execute_tool_script",
+  "arguments": {
+    "script": "import json\n\ndef exists(path):\n    return execute_tool('editor_toolset.toolsets.asset.AssetTools.exists', json.dumps({'path': path}))['returnValue']\n\ndef duplicate(source, destination):\n    if exists(destination):\n        return 'existing'\n    ok = execute_tool('editor_toolset.toolsets.asset.AssetTools.duplicate', json.dumps({'path': source, 'new_path': destination}))['returnValue']\n    if not ok:\n        raise RuntimeError('Failed to duplicate ' + source + ' to ' + destination)\n    return 'created'\n\ndef run():\n    copies = {\n        '/ExtractionOps/Input/IA_ExtractionInteract': '/ShooterExplorer/Input/Actions/IA_Interact',\n        '/ExtractionOps/Input/IMC_Extraction': '/ShooterCore/Input/Mappings/IMC_ShooterGame',\n        '/ExtractionOps/Input/DA_ExtractionInputAddOns': '/ShooterCore/Input/Actions/InputData_ShooterGame_AddOns',\n        '/ExtractionOps/Experiences/DA_ExtractionInputActionSet': '/ShooterCore/Experiences/LAS_ShooterGame_SharedInput'\n    }\n    results = {}\n    for destination, source in copies.items():\n        results[destination] = duplicate(source, destination)\n    if not execute_tool('editor_toolset.toolsets.asset.AssetTools.save_assets', json.dumps({'asset_paths': list(copies.keys())}))['returnValue']:\n        raise RuntimeError('Failed to save Week 3 input assets')\n    return {'assets': results, 'saved': True}\n"
+  }
+}

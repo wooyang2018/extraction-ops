@@ -4,6 +4,10 @@
 
 新增本地 Go Backend，用 HTTP + JSON + SQLite 完成开发态登录、玩家资料、房间、Match/Run、Join Ticket、Server Registry，并在 UE Client 和 Dedicated Server 中建立统一访问层。Backend 负责控制面和持久化，不处理移动、射击或实时 Tick。
 
+## 执行基线
+
+开始前完整阅读[12 周执行基线](execution-baseline.md)。UE 端只使用 `D:\Software\UE_5.8` 和 Editor Dedicated Process；不得访问受保护的 ue5-main 源码目录。Go 契约不依赖引擎源码 commit。
+
 ## 与总蓝图同步：Go 后台实施边界
 
 只有第 7 周五分钟玩法闭环通过后才开始后台。第一版是一个 Go 进程和一个 SQLite 数据库，不拆微服务，不引入 Redis、消息队列、ORM、服务发现或容器编排。
@@ -140,6 +144,8 @@ SQLite 驱动固定为纯 Go 的 `modernc.org/sqlite`。通过该驱动支持的
 ### 3.2 Server Registry
 
 Server 每次进程启动生成新的 `server_instance_id`，注册字段包括 build、map、mode、host、port、capacity、status 和启动 nonce。register 用 Bootstrap Credential 认证并返回 Server Session/Fencing Token；heartbeat 只能更新这个实例的健康信息，不能通过客户端提交的 status 把 Backend 已分配或判定 Unhealthy 的实例改回 Available。
+
+当前路线的 `build_version` 固定为 `<project_commit>+ue5.8-<installed_build_version>`，由构建/启动流程注入 Client、Server 和 Backend。它不包含、也不得通过读取受保护源码目录获得 ue5-main commit。
 
 幂等记录键使用 `(actor_scope, route, idempotency_key)`，同时保存规范化请求的 `request_hash`、HTTP 状态码和响应体。同 scope/key 且 hash 相同才重放原响应；hash 不同返回 409 `IdempotencyMismatch`，不能误当成功重试。
 
