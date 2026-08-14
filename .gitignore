@@ -17,6 +17,7 @@ Build/EditorPerfStats.csv
 
 # Generated IDE and project files
 .vs/
+.research-sessions/
 .idea/
 .codex/
 .vscode/
